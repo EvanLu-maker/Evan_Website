@@ -1,0 +1,42 @@
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+export const apiCall = async (action, payload = {}) => {
+  if (!API_BASE_URL) {
+    throw new Error('API URL 未設定，請檢查 .env.local');
+  }
+
+  try {
+    const response = await fetch(API_BASE_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify({ action, ...payload }),
+    });
+
+    const data = await response.json();
+    
+    if (data.status === 'error') {
+      throw new Error(data.message || '發生未知錯誤');
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('API Error:', error);
+    throw error;
+  }
+};
+
+export const api = {
+  login: (account, password, recaptchaToken = null) => 
+    apiCall('login', { account, password, recaptchaToken }),
+    
+  getProducts: (customerToken) => 
+    apiCall('getProducts', { customerToken }),
+    
+  submitOrder: (customerToken, ordersData) => 
+    apiCall('submitOrder', { customerToken, ordersData }),
+    
+  getMyOrders: (customerToken) =>
+    apiCall('getMyOrders', { customerToken })
+};
