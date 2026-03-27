@@ -61,13 +61,23 @@ export default function Shop() {
     const minQty = parseInt(p.MinQty || p.起訂量 || p.最小訂購量 || p.最小量 || 0);
     const maxQty = parseInt(p.MaxQty || p.最大量 || p.最大訂購量 || 0);
     const unit = p.Unit || p.單位 || '';
-    const leadTimeRaw = p.LeadTime || p.提前天數 || p.準備天數 || p.出貨天數 || '1';
-    let leadTime = parseInt(leadTimeRaw, 10);
-    if (isNaN(leadTime)) leadTime = 1;
     
-    const earliestDate = new Date();
-    earliestDate.setDate(earliestDate.getDate() + leadTime);
-    const earliestDateStr = earliestDate.toISOString().split('T')[0];
+    // 取得備貨天數 (LeadTime)
+    const leadTimeRaw = p.LeadTime || p.備貨天數 || p.提前天數 || p.準備天數 || p.出貨天數;
+    let leadTime = parseInt(leadTimeRaw, 10);
+    if (isNaN(leadTime)) leadTime = 1; // 預設 1 天
+    
+    // 使用本地時間計算「最快出貨日」
+    const now = new Date();
+    const earliestDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + leadTime);
+    
+    // 格式化 YYYY-MM-DD
+    const y = earliestDate.getFullYear();
+    const m = String(earliestDate.getMonth() + 1).padStart(2, '0');
+    const d = String(earliestDate.getDate()).padStart(2, '0');
+    const earliestDateStr = `${y}-${m}-${d}`;
+    
+    console.log(`Product: ${name}, LeadTime: ${leadTime}, Earliest: ${earliestDateStr}`);
 
     return { name, minQty, maxQty, unit, leadTime, earliestDateStr };
   };

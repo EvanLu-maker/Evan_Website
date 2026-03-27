@@ -378,7 +378,7 @@ export default function Admin() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
                       <div className="form-group">
                         <label className="form-label">備貨天數</label>
-                        <input type="number" className="form-input" defaultValue={p.LeadTime || p.提前天數 || p.準備天數 || p.出貨天數 || 1} disabled style={{ opacity: 0.7 }} />
+                        <input type="number" className="form-input" defaultValue={p.LeadTime || p.備貨天數 || p.提前天數 || p.準備天數 || p.出貨天數 || 1} disabled style={{ opacity: 0.7 }} />
                       </div>
                       <div className="form-group">
                         <label className="form-label">起訂量</label>
