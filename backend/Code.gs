@@ -1,179 +1,403 @@
 // ============================================
-// B2B 訂貨系統 - Google Apps Script 後端 API
+// B2B 訂貨系統 - 終極後端 API (智慧封鎖與日誌)
 // ============================================
 
-const SCRIPT_VERSION = "1.1.0";
+const SCRIPT_VERSION = "2.1.0";
 
-/**
- * 取得工作表 (具有大小寫防呆功能)
- */
+function initializeDatabase() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // customers
+  let cS = getSheet("customers") || ss.insertSheet("customers");
+  if(cS.getLastRow() < 1) cS.getRange(1, 1, 1, 8).setValues([["Account", "Password", "Token", "IsAdmin", "Email", "Phone", "IsBlocked", "FailedAttempts"]]);
+  if(cS.getLastRow() < 2) cS.appendRow(["evan", "1234", "T-001", "1", "evan@example.com", "0912-345-678", 0, 0]);
+  
+  // Products
+  let pS = getSheet("Products") || ss.insertSheet("Products");
+  if(pS.getLastRow() < 1) pS.getRange(1, 1, 1, 6).setValues([["Name", "Price", "LeadTime", "MinQty", "MaxQty", "Unit"]]);
+  
+  // Whitelist
+  let wS = getSheet("Whitelist") || ss.insertSheet("Whitelist");
+  if(wS.getLastRow() < 1) wS.getRange(1, 1, 1, 2).setValues([["Account", "ProductName"]]);
+  
+  // order
+  let oS = getSheet("order");
+  if (!oS) {
+      oS = ss.insertSheet("order");
+      oS.appendRow(["Timestamp", "CustomerToken", "BatchID", "ProductID", "Quantity", "Unit", "ShippingDays", "TargetShipDate", "Status", "TotalAmount"]);
+  } else {
+      if (oS.getLastRow() < 1) {
+          oS.appendRow(["Timestamp", "CustomerToken", "BatchID", "ProductID", "Quantity", "Unit", "ShippingDays", "TargetShipDate", "Status", "TotalAmount"]);
+      } else {
+          // Check if CustomerToken exists in header, if not, insert new header row
+          const headers = oS.getRange(1, 1, 1, oS.getLastColumn() || 1).getValues()[0];
+          if (headers.indexOf("CustomerToken") === -1) {
+              oS.insertRowBefore(1);
+              oS.getRange(1, 1, 1, 10).setValues([["Timestamp", "CustomerToken", "BatchID", "ProductID", "Quantity", "Unit", "ShippingDays", "TargetShipDate", "Status", "TotalAmount"]]);
+          }
+      }
+  }
+
+  // LoginLogs
+  let lS = getSheet("LoginLogs") || ss.insertSheet("LoginLogs");
+  if(lS.getLastRow() < 1) lS.appendRow(["Timestamp", "Account", "Status", "IP", "Message"]);
+}
+
 function getSheet(name) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  // 嘗試精確匹配
-  let sheet = ss.getSheetByName(name);
-  if (sheet) return sheet;
-  
-  // 嘗試不分大小寫匹配
   const sheets = ss.getSheets();
-  for (let s of sheets) {
-    if (s.getName().toLowerCase() === name.toLowerCase()) return s;
+  for (let s of sheets) if (s.getName().toLowerCase() === name.toLowerCase()) return s;
+  return null;
+}
+
+// 智慧欄位搜尋助手
+function getColIdx(sheet, keywords) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn() || 1).getValues()[0];
+  for (let k of keywords) {
+    const idx = headers.findIndex(h => String(h).toLowerCase().trim() === k.toLowerCase());
+    if (idx > -1) return idx;
+  }
+  return -1;
+}
+
+function doGet(e) { 
+  initializeDatabase(); 
+  return res({status: 'success', version: SCRIPT_VERSION, message: '系統全自動建表完成'}); 
+}
+
+function doPost(e) {
+  initializeDatabase(); 
+  try {
+    const b = JSON.parse(e.postData.contents);
+    switch(b.action) {
+      case 'login': return res(handleLogin(b.account, b.password));
+      case 'getProducts': return res(getProducts(b.customerToken));
+      case 'submitOrder': return res(submitOrder(b.customerToken, b.ordersData));
+      case 'getMyOrders': return res(getMyOrders(b.customerToken));
+      case 'updateProfile': return res(updateProfile(b.customerToken, b.profileData));
+      case 'getLoginLogs': return res(getLoginLogs(b.customerToken));
+      case 'toggleUserBlock': return res(toggleUserBlock(b.customerToken, b.targetAccount, b.isBlocked));
+      case 'getCustomers': return res(getCustomers(b.customerToken));
+      default: return res({status: 'error', message: '未知 Action'});
+    }
+  } catch(err) { return res({status: 'error', message: err.toString()}); }
+}
+
+function logLogin(account, status, msg) {
+  let lS = getSheet("LoginLogs");
+  if (lS) {
+    lS.insertRowAfter(1);
+    lS.getRange(2, 1, 1, 5).setValues([[new Date(), account, status, "隱藏", msg]]);
+  }
+}
+
+function handleLogin(account, password) {
+  const sheet = getSheet("customers");
+  if (!sheet) return {status: 'error', message: '找不到 customers 工作表'};
+  
+  const colA = getColIdx(sheet, ["帳號", "Account", "Username", "Login"]);
+  const colP = getColIdx(sheet, ["密碼", "Password", "Pass"]);
+  const colT = getColIdx(sheet, ["Token", "代碼"]);
+  const colIsAdmin = getColIdx(sheet, ["IsAdmin", "管理員", "管理權限"]);
+  const colEmail = getColIdx(sheet, ["Email", "電子郵件", "郵箱"]);
+  const colPhone = getColIdx(sheet, ["Phone", "電話", "手機"]);
+  const colBlocked = getColIdx(sheet, ["IsBlocked", "已封鎖", "黑名單"]);
+  const colFailed = getColIdx(sheet, ["FailedAttempts", "失敗次數"]);
+  
+  if (colA === -1) return {status: 'error', message: '找不到「帳號」欄位'};
+
+  const data = sheet.getDataRange().getValues();
+
+  for(let i=1; i<data.length; i++) {
+    const accCell = String(data[i][colA]).trim();
+    if(accCell.toLowerCase() === String(account).trim().toLowerCase()) {
+      
+      let isBlocked = false;
+      if (colBlocked > -1) isBlocked = (data[i][colBlocked] == "1" || data[i][colBlocked] === true || String(data[i][colBlocked]).toUpperCase() === "TRUE");
+
+      if (isBlocked) {
+        logLogin(account, "失敗", "帳號已遭系統鎖定");
+        return {status: 'error', message: '此帳號已遭系統鎖定，請聯絡管理員解除封鎖'};
+      }
+
+      if(String(data[i][colP]).trim() === String(password).trim()) {
+        // 成功，重置失敗次數
+        if (colFailed > -1) sheet.getRange(i+1, colFailed+1).setValue(0);
+        
+        // 取得或產生 Token
+        let t = colT > -1 ? data[i][colT] : '';
+        if (!t) { 
+          t = 'T-' + Math.random().toString(36).substr(2, 9).toUpperCase(); 
+          if (colT > -1) sheet.getRange(i+1, colT+1).setValue(t); 
+        }
+
+        // 判斷是否為管理員
+        const isAdmin = colIsAdmin > -1 ? (data[i][colIsAdmin] == "1" || data[i][colIsAdmin] === true || String(data[i][colIsAdmin]).toUpperCase() === "TRUE") : false;
+
+        logLogin(account, "成功", "登入成功");
+        return {status: 'success', user: {
+          account: accCell, 
+          token: t,
+          isAdmin: isAdmin,
+          email: colEmail > -1 ? data[i][colEmail] : '',
+          phone: colPhone > -1 ? data[i][colPhone] : ''
+        }};
+      } else {
+        // 失敗
+        if (colFailed > -1) {
+          let failed = parseInt(data[i][colFailed]) || 0;
+          failed += 1;
+          sheet.getRange(i+1, colFailed+1).setValue(failed);
+          if (failed >= 5 && colBlocked > -1) {
+            sheet.getRange(i+1, colBlocked+1).setValue(1);
+            logLogin(account, "封鎖", "密碼連續錯誤 5 次");
+            return {status: 'error', message: '帳號已被鎖定'};
+          }
+          logLogin(account, "失敗", `密碼錯誤 (${failed} 次)`);
+          return {status: 'error', message: `密碼錯誤 (剩 ${5 - failed} 次)`};
+        }
+        return {status: 'error', message: '密碼錯誤'};
+      }
+    }
+  }
+  
+  logLogin(account || "未知", "失敗", "帳號不存在");
+  return {status: 'error', message: '帳號或密碼不正確'};
+}
+
+function getAccountByToken(token) {
+  if (token === "ADMIN") return "ADMIN";
+  const sheet = getSheet("customers");
+  if (!sheet) return null;
+
+  const data = sheet.getDataRange().getValues();
+  const colA = getColIdx(sheet, ["帳號", "Account", "Username", "Login"]);
+  const colT = getColIdx(sheet, ["Token", "代碼"]);
+  
+  if (colT === -1 || colA === -1) return null;
+
+  for(let i=1; i<data.length; i++) {
+    if(String(data[i][colT]) === String(token)) return data[i][colA];
   }
   return null;
 }
 
-/**
- * 處理 GET 請求 (測試連線用)
- */
-function doGet(e) {
-  return createResponse({
-    status: 'success',
-    message: 'B2B API is running v' + SCRIPT_VERSION,
-    action_requested: e.parameter.action || 'none'
-  });
+function isAdminToken(token) {
+  if (token === "ADMIN") return true;
+  const sheet = getSheet("customers");
+  if (!sheet) return false;
+
+  const data = sheet.getDataRange().getValues();
+  const colT = getColIdx(sheet, ["Token", "代碼"]);
+  const colIsAdmin = getColIdx(sheet, ["IsAdmin", "管理員", "管理權限"]);
+  
+  if (colT === -1 || colIsAdmin === -1) return false;
+
+  for(let i=1; i<data.length; i++) {
+    if(String(data[i][colT]) === String(token)) {
+      return (data[i][colIsAdmin] == "1" || data[i][colIsAdmin] === true || String(data[i][colIsAdmin]).toUpperCase() === "TRUE");
+    }
+  }
+  return false;
 }
 
-/**
- * 處理 POST 請求 (主要 API 進入點)
- */
-function doPost(e) {
-  try {
-    const postBody = JSON.parse(e.postData.contents);
-    const action = postBody.action;
+function getProducts(customerToken) {
+  const account = getAccountByToken(customerToken);
+  if (!account) return {status: 'error', message: '無效的 Token'};
 
-    // 路由 (Routing)
-    switch(action) {
-      case 'login':
-        return handleLogin(postBody.account, postBody.password);
-      case 'getProducts':
-        return getProducts(postBody.customerToken);
-      case 'submitOrder':
-        return submitOrder(postBody.customerToken, postBody.ordersData);
-      case 'getMyOrders':
-        return getMyOrders(postBody.customerToken);
-      default:
-        return createResponse({ status: 'error', message: '未知的 Action: ' + action });
+  const isAdmin = isAdminToken(customerToken);
+  let allowedSet = new Set();
+  
+  // 如果不是管理員，則需要檢查白名單
+  if (!isAdmin) {
+    // 來源 1: Whitelist 工作表
+    const wSheet = getSheet("Whitelist");
+    if (wSheet) {
+      const wData = wSheet.getDataRange().getValues();
+      const wColA = getColIdx(wSheet, ["帳號", "Account", "Username"]);
+      const wColP = getColIdx(wSheet, ["ProductName", "品名", "商品名稱"]);
+      if (wColA > -1 && wColP > -1) {
+        for(let i=1; i<wData.length; i++) {
+          if(String(wData[i][wColA]).toLowerCase().trim() === String(account).toLowerCase().trim()) {
+            allowedSet.add(String(wData[i][wColP]).toLowerCase().trim());
+          }
+        }
+      }
     }
-  } catch(error) {
-    return createResponse({ status: 'error', message: error.toString() });
+
+    // 來源 2: customers 工作表中的「可購產品」欄位
+    const cSheet = getSheet("customers");
+    if (cSheet) {
+      const cData = cSheet.getDataRange().getValues();
+      const cColA = getColIdx(cSheet, ["帳號", "Account", "Username"]);
+      const cColList = getColIdx(cSheet, ["可購產品", "AllowedProducts", "Products"]);
+      if (cColA > -1 && cColList > -1) {
+        for(let i=1; i<cData.length; i++) {
+          if(String(cData[i][cColA]).toLowerCase().trim() === String(account).toLowerCase().trim()) {
+            const rawList = String(cData[i][cColList]);
+            // 支援逗號、分號、換行分隔
+            const items = rawList.split(/[,;\n\r]+/).map(s => s.trim().toLowerCase()).filter(s => s.length > 0);
+            items.forEach(it => allowedSet.add(it));
+          }
+        }
+      }
+    }
+  }
+
+  const pSheet = getSheet("Products");
+  if (!pSheet) return {status: 'error', message: '找不到 Products 工作表'};
+  
+  const pData = pSheet.getDataRange().getValues();
+  const pHeaders = pData[0];
+  const pColNameIdx = getColIdx(pSheet, ["品名", "商品名稱", "Name", "Product", "Item"]);
+  const colName = pColNameIdx > -1 ? pColNameIdx : 0;
+  
+  let list = [];
+  for(let i=1; i<pData.length; i++) {
+    const pName = String(pData[i][colName]).trim();
+    const pNameLower = pName.toLowerCase();
+
+    // 管理員全開，或是商品在白名單內
+    if (isAdmin || allowedSet.has(pNameLower)) {
+      let obj = {};
+      for(let j=0; j<pHeaders.length; j++) obj[pHeaders[j]] = pData[i][j];
+      list.push(obj);
+    }
+  }
+
+  if(list.length === 0) {
+      return {status: 'error', message: '您目前沒有商品採購權限。'};
+  }
+
+  return {status: 'success', data: list};
+}
+
+function updateProfile(customerToken, profileData) {
+  const sheet = getSheet("customers");
+  const data = sheet.getDataRange().getValues();
+  const colT = data[0].indexOf('Token'), colP = data[0].indexOf('Password'), colEmail = data[0].indexOf('Email'), colPhone = data[0].indexOf('Phone');
+  
+  for(let i=1; i<data.length; i++) {
+    if(colT > -1 && String(data[i][colT]) === String(customerToken)) {
+       if(profileData.password && String(profileData.password).trim() !== "") {
+           sheet.getRange(i+1, colP+1).setValue(profileData.password);
+       }
+       if(colEmail > -1) sheet.getRange(i+1, colEmail+1).setValue(profileData.email || '');
+       if(colPhone > -1) sheet.getRange(i+1, colPhone+1).setValue(profileData.phone || '');
+       return {status: 'success', message: '個人資料更新成功！'};
+    }
+  }
+  return {status: 'error', message: '驗證失敗'};
+}
+
+function submitOrder(customerToken, ordersData) {
+  try {
+    const oSheet = getSheet("order");
+    const account = getAccountByToken(customerToken);
+    if (!account) return {status: 'error', message: '無效 Token'};
+
+    const timestamp = new Date();
+    const batchId = "B2B-" + timestamp.getTime().toString().substr(-6) + "-" + Math.floor(Math.random()*1000);
+
+    ordersData.forEach(batch => {
+      batch.items.forEach(item => {
+        // [Timestamp, CustomerToken, BatchID, ProductID, Quantity, Unit, ShippingDays, TargetShipDate, Status, TotalAmount]
+        // Setting TotalAmount to 0 or empty since frontend no longer tracks prices.
+        oSheet.appendRow([timestamp, customerToken, batchId, item.productName, item.qty, item.unit || '', '-', batch.shipDate, '待處理', '']);
+      });
+    });
+
+    return {status: 'success', message: '訂單送出成功'};
+  } catch(err) {
+    return {status: 'error', message: err.toString()};
   }
 }
 
-/**
- * 登入處理
- */
-function handleLogin(account, password) {
-  const sheet = getSheet("customers");
-  if (!sheet) return createResponse({ status: 'error', message: '找不到 customers 工作表' });
+function getMyOrders(customerToken) {
+  try {
+    const oSheet = getSheet("order");
+    if (!oSheet) return {status: 'success', data: []};
+    
+    const range = oSheet.getDataRange();
+    if (!range) return {status: 'success', data: []};
+    
+    const data = range.getValues();
+    if (!data || data.length < 2) return {status: 'success', data: []};
+
+    const headers = data[0];
+    const colToken = headers.indexOf('CustomerToken');
+    if (colToken === -1) return {status: 'success', data: []};
+    
+    let list = [];
+    for(let i=1; i<data.length; i++) {
+      if (customerToken === "ADMIN" || String(data[i][colToken]) === String(customerToken)) {
+        let obj = {};
+        for(let j=0; j<headers.length; j++) obj[headers[j]] = data[i][j];
+        list.push(obj);
+      }
+    }
+    return {status: 'success', data: list.reverse()};
+  } catch(err) {
+    return {status: 'error', message: err.toString()};
+  }
+}
+
+// === 新增管理員後台 API ===
+
+function getLoginLogs(customerToken) {
+  if (!isAdminToken(customerToken)) return {status: 'error', message: '權限不足'};
+  
+  const sheet = getSheet("LoginLogs");
+  if (!sheet) return {status: 'success', data: []};
 
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
-
-  const colAccount = headers.indexOf('Account');
-  const colPassword = headers.indexOf('Password');
-  const colToken = headers.indexOf('Token');
-  const colIsAdmin = headers.indexOf('IsAdmin');
   
-  if(colAccount === -1 || colPassword === -1) 
-    return createResponse({ status: 'error', message: '資料表缺漏必填欄位 (Account, Password)' });
-
-  for(let i = 1; i < data.length; i++) {
-    if(String(data[i][colAccount]) === String(account) && String(data[i][colPassword]) === String(password)) {
-      return createResponse({
-        status: 'success',
-        user: {
-          account: data[i][colAccount],
-          token: data[i][colToken] || 'auto-token-' + i,
-          isAdmin: data[i][colIsAdmin] == "1" || data[i][colIsAdmin] === true
-        }
-      });
-    }
+  let list = [];
+  // 只取前 100 筆紀錄
+  const limit = Math.min(data.length, 101);
+  for(let i=1; i<limit; i++) {
+     let obj = {};
+     for(let j=0; j<headers.length; j++) obj[headers[j]] = data[i][j];
+     list.push(obj);
   }
-  return createResponse({ status: 'error', message: '帳號或密碼錯誤' });
+  return {status: 'success', data: list};
 }
 
-/**
- * 獲取客戶商品列表
- */
-function getProducts(customerToken) {
-  const productSheet = getSheet("Products");
-  if (!productSheet) return createResponse({ status: 'error', message: '找不到 Products 工作表' });
-
-  const data = productSheet.getDataRange().getValues();
+function getCustomers(customerToken) {
+  if (!isAdminToken(customerToken)) return {status: 'error', message: '權限不足'};
+  const sheet = getSheet("customers");
+  const data = sheet.getDataRange().getValues();
   const headers = data[0];
   
-  let products = [];
-  for(let i = 1; i < data.length; i++) {
-    let p = {};
-    headers.forEach((h, index) => {
-      p[h] = data[i][index];
-    });
-    products.push(p);
+  let list = [];
+  for(let i=1; i<data.length; i++) {
+     let obj = {};
+     for(let j=0; j<headers.length; j++) obj[headers[j]] = data[i][j];
+     list.push(obj);
   }
-  return createResponse({ status: 'success', data: products });
+  return {status: 'success', data: list};
 }
 
-/**
- * 提交訂單 (支援自動拆單寫入)
- */
-function submitOrder(customerToken, ordersData) {
-  const orderSheet = getSheet("order");
-  if (!orderSheet) return createResponse({ status: 'error', message: '找不到 order 工作表' });
-
-  // 取得客戶名稱 (簡單模擬，正式版應從 Token 反查)
-  const customerName = customerToken; 
-  const timestamp = new Date();
+function toggleUserBlock(customerToken, targetAccount, isBlockedBoolean) {
+  if (!isAdminToken(customerToken)) return {status: 'error', message: '權限不足'};
   
-  // 檢查標題列，若為空則寫入標題
-  if (orderSheet.getLastRow() === 0) {
-    orderSheet.appendRow(['Timestamp', 'CustomerToken', 'ProductID', 'Quantity', 'ShippingDays', 'Status', 'TotalAmount']);
-  }
-
-  // ordersData 為陣列，每個元素代表一個批次 (拆單後的結果)
-  ordersData.forEach(batch => {
-    batch.items.forEach(item => {
-      orderSheet.appendRow([
-        timestamp,
-        customerName,
-        item.productName,
-        item.quantity,
-        batch.expectedShippingDays,
-        '待處理',
-        batch.batchTotal // 簡化版，僅記錄金額
-      ]);
-    });
-  });
-
-  return createResponse({ status: 'success', message: '訂單已成功存入試算表' });
-}
-
-/**
- * 獲取歷史訂單
- */
-function getMyOrders(customerToken) {
-  const orderSheet = getSheet("order");
-  if (!orderSheet) return createResponse({ status: 'success', data: [] });
-
-  const data = orderSheet.getDataRange().getValues();
-  const headers = data[0];
-  const colToken = headers.indexOf('CustomerToken');
+  const sheet = getSheet("customers");
+  const data = sheet.getDataRange().getValues();
+  const colA = data[0].indexOf('Account'), colBlocked = data[0].indexOf('IsBlocked'), colFailed = data[0].indexOf('FailedAttempts');
   
-  let myOrders = [];
-  for(let i = 1; i < data.length; i++) {
-    if (String(data[i][colToken]) === String(customerToken)) {
-      let order = {};
-      headers.forEach((h, index) => {
-        order[h] = data[i][index];
-      });
-      myOrders.push(order);
+  for(let i=1; i<data.length; i++) {
+    if(String(data[i][colA]) === String(targetAccount)) {
+       sheet.getRange(i+1, colBlocked+1).setValue(isBlockedBoolean ? 1 : 0);
+       if (!isBlockedBoolean && colFailed > -1) {
+           sheet.getRange(i+1, colFailed+1).setValue(0); // 解鎖時順便重置失敗次數
+       }
+       return {status: 'success', message: '用戶狀態更新成功'};
     }
   }
-  return createResponse({ status: 'success', data: myOrders.reverse() }); // 最新訂單在前
+  return {status: 'error', message: '找不到此用戶'};
 }
 
-/**
- * 回傳 JSON 給前端
- */
-function createResponse(data) {
-  return ContentService.createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
+function res(data) {
+  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
 }

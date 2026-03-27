@@ -122,6 +122,12 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
 }
 
+/* Make Date Picker icon white */
+::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }

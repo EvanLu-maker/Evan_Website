@@ -1,6 +1,7 @@
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
-import { ShoppingCart, LogOut, Package, Loader2, X, Plus, Minus, CheckCircle, FileText } from 'lucide-react';
+import { LogOut, Package, Loader2, Plus, Minus, CheckCircle, User, FileText, ShieldAlert } from 'lucide-react';
 
 export default function Shop() {
   const navigate = useNavigate();
@@ -9,9 +10,8 @@ export default function Shop() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
-  // 購物車狀態與 UI 控制
-  const [cart, setCart] = useState([]);
-  const [isCartOpen, setIsCartOpen] = useState(false);
+  // 訂購單列: { id (unique), productId, qty, shipDate }
+  const [rows, setRows] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
 
@@ -27,11 +27,17 @@ export default function Shop() {
   }, [navigate]);
 
   const fetchProducts = async (token) => {
+    setLoading(true);
+    setError('');
     try {
       const res = await api.getProducts(token);
       setProducts(res.data || []);
+      if ((res.data || []).length > 0) {
+        // 初始化第一個空列
+        setRows([{ id: Date.now(), productId: '', qty: '', shipDate: '' }]);
+      }
     } catch (err) {
-      setError('無法載入商品清單，請確認 API URL 設定正確，或試算表有 Products 工作表及庫存資料。');
+      setError(err.message || '無法載入商品清單，請確認試算表設定，或白名單中沒有授權商品。');
     } finally {
       setLoading(false);
     }
@@ -42,85 +48,112 @@ export default function Shop() {
     navigate('/');
   };
 
-  const addToCart = (product) => {
-    setCart(prev => {
-      // 確保將完整的商品物件儲存下來，而不只有文字字串或參照
-      const existing = prev.find(item => JSON.stringify(item.product) === JSON.stringify(product));
-      if (existing) {
-        return prev.map(item => JSON.stringify(item.product) === JSON.stringify(product) ? { ...item, quantity: item.quantity + 1 } : item);
-      }
-      return [...prev, { product, quantity: 1 }];
+  const getProductInfo = (pid) => {
+    if (!pid) return null;
+    const p = products.find(x => {
+        const xName = x.Name || x.品名 || x.商品名稱 || x.Product || x.Item || Object.values(x).find(v => typeof v === 'string' && isNaN(Number(v)));
+        return xName === pid;
     });
-  };
-
-  const updateQuantity = (idx, delta) => {
-    setCart(prev => {
-      const newCart = [...prev];
-      newCart[idx].quantity += delta;
-      if (newCart[idx].quantity <= 0) {
-        newCart.splice(idx, 1);
-      }
-      return newCart;
-    });
-  };
-
-  const getDynamicFieldInfo = (product) => {
-    const keys = Object.keys(product);
-    const titleField = keys.find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('品名')) || Object.keys(product)[0];
-    const priceField = keys.find(k => k.toLowerCase().includes('price') || k.toLowerCase().includes('價格')) || Object.keys(product)[1];
-    const prepareField = keys.find(k => k.includes('天數') || k.toLowerCase().includes('leadtime') || k.toLowerCase().includes('出貨'));
+    if (!p) return null;
     
-    return {
-      name: product[titleField] || '未命中商品名',
-      price: priceField ? product[priceField] : 0,
-      prepareDays: prepareField ? product[prepareField] : 1
-    };
+    // Normalizing keys
+    const name = p.Name || p.品名 || p.商品名稱 || p.Product || p.Item || Object.values(p).find(v => typeof v === 'string' && isNaN(Number(v)));
+    const minQty = parseInt(p.MinQty || p.起訂量 || p.最小訂購量 || p.最小量 || 0);
+    const maxQty = parseInt(p.MaxQty || p.最大量 || p.最大訂購量 || 0);
+    const unit = p.Unit || p.單位 || '';
+    const leadTimeRaw = p.LeadTime || p.提前天數 || p.準備天數 || p.出貨天數 || '1';
+    let leadTime = parseInt(leadTimeRaw, 10);
+    if (isNaN(leadTime)) leadTime = 1;
+    
+    const earliestDate = new Date();
+    earliestDate.setDate(earliestDate.getDate() + leadTime);
+    const earliestDateStr = earliestDate.toISOString().split('T')[0];
+
+    return { name, minQty, maxQty, unit, leadTime, earliestDateStr };
   };
 
-  const calculateTotal = () => {
-    return cart.reduce((acc, item) => {
-      const info = getDynamicFieldInfo(item.product);
-      const price = parseFloat(String(info.price).replace(/[^0-9.-]+/g, "")) || 0;
-      return acc + (price * item.quantity);
-    }, 0);
+  const addRow = () => {
+    setRows(prev => [...prev, { id: Date.now(), productId: '', qty: '', shipDate: '' }]);
   };
 
-  // 結帳並依「出貨天數/準備天數」自動拆單邏輯
+  const removeRow = (id) => {
+    setRows(prev => prev.filter(r => r.id !== id));
+  };
+
+  const updateRow = (id, field, value) => {
+    setRows(prev => prev.map(r => {
+      if (r.id !== id) return r;
+      
+      const newRow = { ...r, [field]: value };
+      
+      // 當選擇商品改變時，自動帶入預設數量與最早出貨日
+      if (field === 'productId') {
+         const info = getProductInfo(value);
+         if (info) {
+             newRow.qty = info.minQty > 0 ? info.minQty : 1;
+             newRow.shipDate = info.earliestDateStr;
+         } else {
+             newRow.qty = '';
+             newRow.shipDate = '';
+         }
+      }
+      return newRow;
+    }));
+  };
+
   const handleCheckout = async () => {
-    if (cart.length === 0) return;
+    // 過濾有效資料
+    const validRows = rows.filter(r => r.productId && r.qty > 0 && r.shipDate);
+    if (validRows.length === 0) {
+      alert("請至少選擇一項商品並填妥數量與出貨日！");
+      return;
+    }
+
+    // 檢查起訂量、最大量、與出貨日
+    for (let r of validRows) {
+        const info = getProductInfo(r.productId);
+        if (!info) continue;
+        const q = parseInt(r.qty);
+        if (info.minQty > 0 && q < info.minQty) {
+            alert(`商品 [${info.name}] 數量低於起訂量 (${info.minQty})`);
+            return;
+        }
+        if (info.maxQty > 0 && q > info.maxQty) {
+            alert(`商品 [${info.name}] 數量超過最大限制 (${info.maxQty})`);
+            return;
+        }
+        if (r.shipDate < info.earliestDateStr) {
+            alert(`商品 [${info.name}] 無法在 ${r.shipDate} 出貨，最快出貨日為 ${info.earliestDateStr}`);
+            return;
+        }
+    }
+
     setIsSubmitting(true);
     
-    // 將購物車商品自動以「出貨天數」分批歸類成不同訂單 (拆單)
+    // 依出貨日拆單
     const groupedOrders = {};
-    cart.forEach(item => {
-      const info = getDynamicFieldInfo(item.product);
-      const days = parseInt(info.prepareDays, 10) || 1;
-      if (!groupedOrders[days]) groupedOrders[days] = [];
-      groupedOrders[days].push({
-        productName: info.name,
-        price: info.price,
-        quantity: item.quantity,
-        rawProduct: item.product // 夾帶完整 metadata 回到後端備查
+    validRows.forEach(row => {
+      if (!groupedOrders[row.shipDate]) groupedOrders[row.shipDate] = [];
+      const info = getProductInfo(row.productId);
+      groupedOrders[row.shipDate].push({
+        productName: row.productId,
+        qty: parseInt(row.qty),
+        unit: info.unit
       });
     });
 
-    // 格式化傳送給 Google Sheets API
-    const ordersData = Object.keys(groupedOrders).map(days => ({
-      expectedShippingDays: parseInt(days),
-      items: groupedOrders[days],
-      batchTotal: groupedOrders[days].reduce((acc, it) => acc + (parseFloat(String(it.price).replace(/[^0-9.-]+/g, "")) || 0) * it.quantity, 0)
+    const ordersData = Object.keys(groupedOrders).map(shipDate => ({
+      shipDate: shipDate,
+      items: groupedOrders[shipDate]
     }));
 
     try {
       await api.submitOrder(user.token, ordersData);
       setOrderSuccess(true);
-      setCart([]); // 清空購物車
-      setTimeout(() => {
-        setOrderSuccess(false);
-        setIsCartOpen(false);
-      }, 3000);
+      setRows([{ id: Date.now(), productId: '', qty: '', shipDate: '' }]); // reset
+      setTimeout(() => { setOrderSuccess(false); navigate('/orders'); }, 2000);
     } catch (err) {
-      alert("訂單送出失敗：" + err.message + "\n請確認試算表有 Orders 工作表！");
+      alert("訂單送出失敗：" + err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -135,164 +168,154 @@ export default function Shop() {
   }
 
   return (
-    <div className="animate-fade-in" style={{ padding: '2rem 1rem', position: 'relative' }}>
+    <div className="animate-fade-in" style={{ padding: '2rem 1rem', position: 'relative', maxWidth: '1000px', margin: '0 auto' }}>
       
       {/* 導覽列 */}
-      <nav className="glass-panel" style={{ padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+      <nav className="glass-panel" style={{ padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap:'wrap', gap:'1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Package color="var(--primary-color)" />
-          <h2 style={{ color: 'var(--primary-color)', margin: 0 }}>B2B 商品大廳</h2>
+          <h2 style={{ color: 'var(--primary-color)', margin: 0 }}>採購大廳</h2>
         </div>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-          <span style={{ color: 'var(--text-secondary)' }}>企業帳號, {user?.account}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap:'wrap' }}>
+          <span style={{ color: 'var(--text-secondary)', marginRight:'10px' }}>歡迎, {user?.account}</span>
           
           <Link to="/orders" className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
-            <Package size={18} />
-            我的訂單
+            <FileText size={18} /> 我的訂單
           </Link>
 
-          <button onClick={() => setIsCartOpen(true)} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', position: 'relative' }}>
-            <ShoppingCart size={18} />
-            待結帳
-            {cart.length > 0 && (
-              <span style={{ position: 'absolute', top: '-8px', right: '-8px', background: 'var(--danger-color)', color: 'white', fontSize: '0.7rem', fontWeight: 'bold', padding: '2px 6px', borderRadius: '50%' }}>
-                {cart.reduce((acc, item) => acc + item.quantity, 0)}
-              </span>
-            )}
-          </button>
+          <Link to="/profile" className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
+            <User size={18} /> 個人資料
+          </Link>
+          
+          {user?.isAdmin && (
+            <Link to="/admin" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
+              <ShieldAlert size={18} /> 管理員後台
+            </Link>
+          )}
           
           <button onClick={handleLogout} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--danger-color)', borderColor: 'rgba(248, 81, 73, 0.3)' }}>
-            <LogOut size={16} />
-            登出
+            <LogOut size={16} /> 登出
           </button>
         </div>
       </nav>
 
-      {/* 商品區塊 */}
-      {error ? (
-        <div className="glass-panel" style={{ textAlign: 'center', color: 'var(--danger-color)' }}>
-          <p>{error}</p>
-        </div>
-      ) : products.length === 0 ? (
-        <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-          <Package size={48} style={{ margin: '0 auto 1rem', opacity: 0.2 }} />
-          <h3>試算表連線成功，但尚未發現商品資料</h3>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '1rem', maxWidth: '500px', margin: '1rem auto' }}>
-            請檢查您的 Google 試算表 <strong>Products</strong> 工作表：<br/>
-            1. 第一列必須有標題（例如：品名、價格）<br/>
-            2. 第二列以下必須至少有一行商品資料。<br/>
-            3. 確認工作表名稱大小寫為 <strong>Products</strong>。
-          </p>
-          <button onClick={() => fetchProducts(user.token)} className="btn btn-outline" style={{ marginTop: '1rem' }}>
-            重新嘗試讀取
-          </button>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
-          {products.map((product, idx) => {
-            const info = getDynamicFieldInfo(product);
-            const otherKeys = Object.keys(product).filter(k => product[k] !== info.name && product[k] !== info.price);
-            
-            return (
-              <div key={idx} className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{ padding: '2rem 1rem', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', textAlign: 'center', fontSize: '2rem' }}>
-                  📦
-                </div>
-                <div>
-                  <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>{info.name}</h3>
-                  <div style={{ color: 'var(--primary-color)', fontSize: '1.5rem', fontWeight: 'bold' }}>
-                    ${info.price}
-                  </div>
-                  <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                     預計準備天數: {info.prepareDays} 天
-                  </div>
-                  {/* 顯示其他額外資訊 */}
-                  <div style={{ marginTop: '1rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap:'4px' }}>
-                     {otherKeys.slice(0, 4).map(k => (
-                       <div key={k} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{k}: {product[k]}</div>
-                     ))}
-                  </div>
-                </div>
-                
-                <button 
-                  onClick={() => addToCart(product)}
-                  className="btn btn-primary" 
-                  style={{ width: '100%', marginTop: 'auto' }}
-                >
-                  加入訂單
-                </button>
-              </div>
-            );
-          })}
+      {orderSuccess && (
+        <div className="glass-panel" style={{ textAlign: 'center', color: 'var(--success-color)', marginBottom: '2rem' }}>
+          <CheckCircle size={48} style={{ margin: '0 auto 1rem' }} />
+          <h3>訂單已送出成功！</h3>
+          <p>正在為您跳轉至「我的訂單」紀錄...</p>
         </div>
       )}
 
-      {/* 購物車滑出面板 (Drawer) */}
-      {isCartOpen && (
-        <div style={{
-            position: 'fixed', top: 0, right: 0, bottom: 0, width: '400px', maxWidth: '100%',
-            background: 'var(--surface-color)', backdropFilter: 'var(--glass-blur)', zIndex: 50,
-            borderLeft: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column',
-            boxShadow: '-10px 0 20px rgba(0,0,0,0.5)', animation: 'fadeIn 0.2s ease-out'
-          }}>
-          
-          <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <ShoppingCart size={20} /> 企業採購車
-            </h3>
-            <button onClick={() => setIsCartOpen(false)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}><X /></button>
-          </div>
+      {/* 列式下單區塊 */}
+      {error ? (
+        <div className="glass-panel" style={{ textAlign: 'center' }}>
+          <Package size={48} style={{ margin: '0 auto 1rem', opacity: 0.2 }} />
+          <p style={{ color: 'var(--danger-color)' }}>{error}</p>
+          <button onClick={() => fetchProducts(user.token)} className="btn btn-outline" style={{ marginTop: '1rem' }}>
+            重新嘗試
+          </button>
+        </div>
+      ) : products.length === 0 ? (
+        <div className="glass-panel" style={{ textAlign: 'center' }}>
+           <h3>目前無授權商品</h3>
+        </div>
+      ) : (
+        <div className="glass-panel">
+           <div style={{ marginBottom: '1.5rem' }}>
+               <h3 style={{ margin: 0 }}>建立訂購單</h3>
+               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '5px' }}>請逐列新增商品、數量與預定配送日。系統將依據配送日自動幫您分批拆單處理。<br/>每個商品的「最快出貨日」會依據備貨狀況自動顯示。</p>
+           </div>
+           
+           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {rows.map((row, index) => {
+                 const info = getProductInfo(row.productId);
+                 
+                 return (
+                   <div key={row.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 3fr) minmax(100px, 1fr) minmax(150px, 2fr) 60px', gap: '1rem', alignItems: 'flex-start', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                       
+                       {/* 商品選擇 */}
+                       <div>
+                           <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>商品</label>
+                           <select 
+                               className="form-input" 
+                               value={row.productId} 
+                               style={{ backgroundColor: '#1a1d24', color: 'var(--text-primary)' }}
+                               onChange={(e) => updateRow(row.id, 'productId', e.target.value)}
+                           >
+                               <option value="">（請選擇商品）</option>
+                               {products.map((p, idx) => {
+                                   const pName = p.Name || p.品名 || p.商品名稱 || p.Product || p.Item || Object.values(p).find(v => typeof v === 'string' && isNaN(Number(v)));
+                                   return <option key={idx} value={pName}>{pName}</option>
+                               })}
+                           </select>
+                           {info && (
+                               <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                   {info.minQty > 0 || info.maxQty > 0 ? '限制: ' : ''}
+                                   {info.minQty > 0 ? `起訂 ${info.minQty} ` : ''} 
+                                   {info.maxQty > 0 ? `/ 最大 ${info.maxQty}` : ''}
+                               </div>
+                           )}
+                       </div>
 
-          <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
-            {orderSuccess ? (
-              <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--success-color)' }}>
-                <CheckCircle size={48} style={{ margin: '0 auto 1rem' }} />
-                <h3>訂單已送出成功！</h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.5rem' }}>系統已依準備天數自動為您建立分批出貨單。<br/>感謝您的訂購！</p>
-              </div>
-            ) : cart.length === 0 ? (
-              <div style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '2rem' }}>目前尚未加入任何商品</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {cart.map((item, idx) => {
-                  const info = getDynamicFieldInfo(item.product);
-                  return (
-                    <div key={idx} style={{ background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                      <div style={{ fontWeight: '500', marginBottom: '0.5rem' }}>{info.name}</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ color: 'var(--primary-color)' }}>${info.price}</div>
-                        
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', background: 'var(--bg-color)', padding: '0.2rem', borderRadius: '4px' }}>
-                          <button onClick={() => updateQuantity(idx, -1)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', padding: '0.2rem' }}><Minus size={14} /></button>
-                          <span style={{ fontSize: '0.9rem', width: '20px', textAlign: 'center' }}>{item.quantity}</span>
-                          <button onClick={() => updateQuantity(idx, 1)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', padding: '0.2rem' }}><Plus size={14} /></button>
-                        </div>
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>配貨準備: {info.prepareDays} 天</div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+                       {/* 數量輸入 */}
+                       <div>
+                           <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>數量 {info && info.unit ? `(${info.unit})` : ''}</label>
+                           <input 
+                               type="number" 
+                               className="form-input" 
+                               min={info?.minQty > 0 ? info.minQty : 0}
+                               max={info?.maxQty > 0 ? info.maxQty : undefined}
+                               value={row.qty} 
+                               placeholder="數量"
+                               onChange={(e) => updateRow(row.id, 'qty', e.target.value)}
+                           />
+                       </div>
 
-          {!orderSuccess && cart.length > 0 && (
-            <div style={{ padding: '1.5rem', borderTop: '1px solid var(--border-color)', background: '#0a0d12' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', fontSize: '1.1rem', fontWeight: '600' }}>
-                 <span>預估總計</span>
-                 <span>${calculateTotal().toFixed(2)}</span>
-              </div>
-              <button 
-                onClick={handleCheckout} 
-                className="btn btn-primary" 
-                style={{ width: '100%', padding: '0.8rem' }}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? <><Loader2 className="animate-spin" size={18} style={{marginRight:'8px'}}/> 處理訂單中...</> : '確認送出訂單 (系統將自動拆單)'}
-              </button>
-            </div>
-          )}
+                       {/* 出貨日選擇 */}
+                       <div>
+                           <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>配送日期</label>
+                           <input 
+                               type="date" 
+                               className="form-input" 
+                               min={info?.earliestDateStr || ''}
+                               value={row.shipDate} 
+                               onChange={(e) => updateRow(row.id, 'shipDate', e.target.value)}
+                           />
+                           {info && (
+                               <div style={{ fontSize: '0.75rem', color: row.shipDate && row.shipDate < info.earliestDateStr ? 'var(--danger-color)' : 'var(--text-secondary)', marginTop: '4px' }}>
+                                   最快出貨日: {info.earliestDateStr}
+                               </div>
+                           )}
+                       </div>
+
+                       {/* 移除列按鈕 */}
+                       <div style={{ display: 'flex', height: '100%', alignItems: 'center', paddingTop: '18px' }}>
+                           <button onClick={() => removeRow(row.id)} title="移除" style={{ background: 'transparent', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', padding: '8px' }}>
+                               <LogOut size={18} style={{ transform: 'rotate(180deg)' }}/>
+                           </button>
+                       </div>
+                   </div>
+                 );
+              })}
+           </div>
+
+           <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+               <button onClick={addRow} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                   <Plus size={16} /> 新增品項
+               </button>
+
+               <button 
+                  onClick={handleCheckout} 
+                  className="btn btn-primary"
+                  disabled={isSubmitting || rows.length === 0}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 2rem' }}
+               >
+                  {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle size={18} />}
+                  確認送出訂單
+               </button>
+           </div>
         </div>
       )}
     </div>

@@ -94,8 +94,7 @@ export default function Orders() {
                   <th style={{ padding: '1rem' }}>下單日期</th>
                   <th style={{ padding: '1rem' }}>商品名稱</th>
                   <th style={{ padding: '1rem' }}>數量</th>
-                  <th style={{ padding: '1rem' }}>出貨準備天數</th>
-                  <th style={{ padding: '1rem' }}>總計金額</th>
+                  <th style={{ padding: '1rem' }}>預定配送日</th>
                   <th style={{ padding: '1rem' }}>狀態</th>
                 </tr>
               </thead>
@@ -104,9 +103,8 @@ export default function Orders() {
                   <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.95rem' }}>
                     <td style={{ padding: '1rem' }}>{new Date(order.Timestamp).toLocaleString()}</td>
                     <td style={{ padding: '1rem', fontWeight: '500' }}>{order.ProductID}</td>
-                    <td style={{ padding: '1rem' }}>{order.Quantity}</td>
-                    <td style={{ padding: '1rem' }}>{order.ShippingDays} 天</td>
-                    <td style={{ padding: '1rem', color: 'var(--primary-color)', fontWeight: 'bold' }}>${order.TotalAmount}</td>
+                    <td style={{ padding: '1rem' }}>{order.Quantity} {order.Unit || ''}</td>
+                    <td style={{ padding: '1rem' }}>{order.TargetShipDate ? new Date(order.TargetShipDate).toLocaleDateString() : '未指定'}</td>
                     <td style={{ padding: '1rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         {getStatusIcon(order.Status)}

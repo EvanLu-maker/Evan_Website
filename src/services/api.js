@@ -38,5 +38,18 @@ export const api = {
     apiCall('submitOrder', { customerToken, ordersData }),
     
   getMyOrders: (customerToken) =>
-    apiCall('getMyOrders', { customerToken })
+    apiCall('getMyOrders', { customerToken }),
+    
+  updateProfile: (customerToken, profileData) =>
+    apiCall('updateProfile', { customerToken, profileData }),
+    
+  // Admin APIs
+  getLoginLogs: (customerToken) =>
+    apiCall('getLoginLogs', { customerToken }),
+    
+  getCustomers: (customerToken) =>
+    apiCall('getCustomers', { customerToken }),
+    
+  toggleUserBlock: (customerToken, targetAccount, isBlocked) =>
+    apiCall('toggleUserBlock', { customerToken, targetAccount, isBlocked })
 };

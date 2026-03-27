@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Shop from './pages/Shop';
 import Orders from './pages/Orders';
+import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 import './App.css';
 
@@ -14,6 +15,7 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/shop" element={<Shop />} />
         <Route path="/orders" element={<Orders />} />
+        <Route path="/profile" element={<Profile />} />
         
         {/* 管理員後台路由 */}
         <Route path="/admin" element={<Admin />} />
