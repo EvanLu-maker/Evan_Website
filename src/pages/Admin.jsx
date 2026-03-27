@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { Package, Loader2, CheckCircle, XCircle, Clock, Save, RefreshCw, Trash2, Users, ShieldAlert } from 'lucide-react';
+import { Package, Loader2, CheckCircle, XCircle, Clock, Save, RefreshCw, Trash2, Users, ShieldAlert, Plus } from 'lucide-react';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -12,7 +12,7 @@ export default function Admin() {
   
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [activeTab, setActiveTab] = useState('orders'); // 'orders', 'products', 'customers'
+  const [activeTab, setActiveTab] = useState('orders'); // 'orders', 'products', 'customers', 'security'
   const [error, setError] = useState('');
   
   const [adminToken, setAdminToken] = useState('ADMIN');
@@ -30,6 +30,10 @@ export default function Admin() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showOnlyPending, setShowOnlyPending] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'TargetShipDate', direction: 'asc' });
+  
+  // 客戶清單專用搜尋與排序
+  const [searchTermCustomer, setSearchTermCustomer] = useState('');
+  const [sortConfigCustomer, setSortConfigCustomer] = useState({ key: 'Account', direction: 'asc' });
 
   useEffect(() => {
     // 優先讀取本地快取，實現「秒開」
@@ -173,8 +177,68 @@ export default function Admin() {
     return result;
   }, [orders, customers, searchTerm, showOnlyPending, sortConfig]);
 
+  // --- 客戶資料強化與活動追蹤 ---
+  const processedCustomers = useMemo(() => {
+    return customers
+      .filter(c => c.Account)
+      .map(c => {
+        const account = String(c.Account);
+        
+        // 1. 最後登入時間
+        const userLogs = loginLogs.filter(l => l.Account === account && l.Status === '成功');
+        const lastLogin = userLogs.length > 0 
+          ? new Date(Math.max(...userLogs.map(l => new Date(l.Timestamp).getTime())))
+          : null;
+        
+        // 2. 最後訂貨時間 (從 orders 找最新的一筆)
+        const userOrders = orders.filter(o => o.CustomerToken === account || getCustomerName(o.CustomerToken) === account);
+        const lastOrder = userOrders.length > 0
+          ? new Date(Math.max(...userOrders.map(o => new Date(o.Timestamp).getTime())))
+          : null;
+
+        // 3. 計算距離天數 (Last Order)
+        let daysSinceLastOrder = Infinity;
+        if (lastOrder) {
+          const diffTime = Math.abs(new Date() - lastOrder);
+          daysSinceLastOrder = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+
+        return {
+          ...c,
+          lastLogin,
+          lastOrder,
+          daysSinceLastOrder
+        };
+      });
+  }, [customers, loginLogs, orders]);
+
+  // --- 客戶清單過濾與排序 ---
+  const filteredAndSortedCustomers = useMemo(() => {
+    let result = processedCustomers.filter(c => {
+      const matchSearch = String(c.Account).toLowerCase().includes(searchTermCustomer.toLowerCase()) || 
+                          String(c.公司名稱 || c.店名 || '').toLowerCase().includes(searchTermCustomer.toLowerCase());
+      return matchSearch;
+    });
+
+    result.sort((a, b) => {
+      let aVal = a[sortConfigCustomer.key];
+      let bVal = b[sortConfigCustomer.key];
+
+      if (sortConfigCustomer.key === 'lastLogin' || sortConfigCustomer.key === 'lastOrder') {
+        aVal = aVal ? aVal.getTime() : 0;
+        bVal = bVal ? bVal.getTime() : 0;
+      }
+
+      if (aVal < bVal) return sortConfigCustomer.direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortConfigCustomer.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [processedCustomers, searchTermCustomer, sortConfigCustomer]);
+
   const updateOrderStatus = async (rowIdx, newStatus) => {
-    alert('此動作將會更新試算表中的狀態為 ' + newStatus);
+    // 雖然前端先反應，但實際同步應呼叫 API (此處僅為 Demo 簡化)
     setOrders(prev => prev.map((o, i) => i === rowIdx ? { ...o, Status: newStatus } : o));
   };
 
@@ -269,7 +333,12 @@ export default function Admin() {
            <div className="mobile-stack" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               <button onClick={() => setActiveTab('orders')} className={`btn ${activeTab === 'orders' ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1 }}>訂單追蹤</button>
               <button onClick={() => setActiveTab('products')} className={`btn ${activeTab === 'products' ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1 }}>商品</button>
-              <button onClick={() => setActiveTab('customers')} className={`btn ${activeTab === 'customers' ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1 }}>資安/客戶</button>
+              <button onClick={() => setActiveTab('customers')} className={`btn ${activeTab === 'customers' ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                <Users size={16} /> 客戶管理
+              </button>
+              <button onClick={() => setActiveTab('security')} className={`btn ${activeTab === 'security' ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                <ShieldAlert size={16} /> 資安監控
+              </button>
               <div style={{ display: 'flex', gap: '0.5rem', flex: 1.5 }}>
                 <button onClick={() => fetchData(adminToken)} className="btn btn-outline" title="同步最新數據" style={{ flex: 1 }}>
                   <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
@@ -402,72 +471,110 @@ export default function Admin() {
         )}
 
         {activeTab === 'customers' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-              <div className="glass-panel">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <Users color="var(--primary-color)" />
-                          <h3 style={{ margin: 0 }}>客戶狀態與解鎖</h3>
-                      </div>
-                      <button 
-                        onClick={() => { console.log('Opening Customer Modal'); setShowCustomerModal(true); setResultPassword(''); }} 
-                        className="btn btn-primary" 
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                      >
-                        <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>+</span> 新增客戶
-                      </button>
-                  </div>
-                  
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
-                        <th style={{ padding: '1rem' }}>帳號</th>
-                        <th style={{ padding: '1rem' }}>狀態</th>
-                        <th style={{ padding: '1rem' }}>失敗次數</th>
-                        <th style={{ padding: '1rem' }}>操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {customers
-                        .filter(cust => cust.Account || cust.公司名稱 || cust.店名)
-                        .map((cust, idx) => {
-                          const isBlocked = cust.IsBlocked == "1" || cust.IsBlocked === true || cust.IsBlocked === "TRUE";
-                          return (
-                          <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                            <td style={{ padding: '1rem', fontWeight: 'bold' }}>
-                              <div>{cust.Account || '未知帳號'}</div>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>{cust.公司名稱 || cust.店名 || ''}</div>
-                            </td>
-                            <td style={{ padding: '1rem' }}>
-                               {isBlocked ? (
-                                   <span style={{ color: 'var(--danger-color)', display: 'flex', alignItems: 'center', gap: '4px' }}><ShieldAlert size={14} /> 已封鎖</span>
-                               ) : (
-                                   <span style={{ color: 'var(--success-color)' }}>正常</span>
-                               )}
-                            </td>
-                            <td style={{ padding: '1rem' }}>{cust.FailedAttempts || 0}</td>
-                            <td style={{ padding: '1rem' }}>
-                               <button 
-                                  onClick={() => handleToggleBlock(cust.Account, cust.IsBlocked)}
-                                  className={`btn ${isBlocked ? 'btn-primary' : 'btn-outline'}`}
-                                  style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem', borderColor: isBlocked ? '' : 'var(--danger-color)', color: isBlocked ? '' : 'var(--danger-color)' }}
-                               >
-                                  {isBlocked ? '🔓 解除封鎖' : '⛔ 手動封鎖'}
-                               </button>
-                            </td>
-                          </tr>
-                        )})}
-                    </tbody>
-                  </table>
+          <div className="glass-panel">
+            <div className="mobile-stack" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Users color="var(--primary-color)" />
+                <h3 style={{ margin: 0 }}>客戶關係管理清單</h3>
               </div>
+              
+              <div className="mobile-stack" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <input 
+                  type="text" 
+                  placeholder="搜尋帳號或店名..." 
+                  className="form-input" 
+                  style={{ width: '250px', margin: 0 }}
+                  value={searchTermCustomer}
+                  onChange={e => setSearchTermCustomer(e.target.value)}
+                />
+                <button 
+                  onClick={() => { setShowCustomerModal(true); setResultPassword(''); }} 
+                  className="btn btn-primary" 
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', whiteSpace: 'nowrap' }}
+                >
+                  <Plus size={16} /> 新增客戶
+                </button>
+              </div>
+            </div>
 
+            <div className="responsive-container">
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                    <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => {
+                        let direction = 'asc';
+                        if (sortConfigCustomer.key === 'Account' && sortConfigCustomer.direction === 'asc') direction = 'desc';
+                        setSortConfigCustomer({ key: 'Account', direction });
+                    }}>帳號 / 名稱 {sortConfigCustomer.key === 'Account' ? (sortConfigCustomer.direction === 'asc' ? '↑' : '↓') : ''}</th>
+                    <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => {
+                        let direction = 'desc';
+                        if (sortConfigCustomer.key === 'lastLogin' && sortConfigCustomer.direction === 'desc') direction = 'asc';
+                        setSortConfigCustomer({ key: 'lastLogin', direction });
+                    }}>最後登入 {sortConfigCustomer.key === 'lastLogin' ? (sortConfigCustomer.direction === 'asc' ? '↑' : '↓') : ''}</th>
+                    <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => {
+                        let direction = 'asc';
+                        if (sortConfigCustomer.key === 'daysSinceLastOrder' && sortConfigCustomer.direction === 'asc') direction = 'desc';
+                        setSortConfigCustomer({ key: 'daysSinceLastOrder', direction });
+                    }}>距上次訂貨 {sortConfigCustomer.key === 'daysSinceLastOrder' ? (sortConfigCustomer.direction === 'asc' ? '↑' : '↓') : ''}</th>
+                    <th style={{ padding: '1rem' }}>狀態</th>
+                    <th style={{ padding: '1rem' }}>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAndSortedCustomers.map((cust, idx) => {
+                    const isBlocked = (cust.IsBlocked == "1" || cust.IsBlocked === true || cust.IsBlocked === "TRUE");
+                    return (
+                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: isBlocked ? 'rgba(248, 81, 73, 0.05)' : 'transparent' }}>
+                        <td style={{ padding: '1rem' }}>
+                          <div style={{ fontWeight: 'bold', color: isBlocked ? 'var(--danger-color)' : 'var(--text-primary)' }}>{cust.Account}</div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{cust.公司名稱 || cust.店名 || '未命名客戶'}</div>
+                        </td>
+                        <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
+                          {cust.lastLogin ? cust.lastLogin.toLocaleString() : <span style={{ opacity: 0.3 }}>無紀錄</span>}
+                        </td>
+                        <td style={{ padding: '1rem', fontSize: '0.9rem' }}>
+                          {cust.lastOrder ? (
+                            <span style={{ color: cust.daysSinceLastOrder > 30 ? 'var(--danger-color)' : 'var(--success-color)' }}>
+                              {cust.daysSinceLastOrder} 天前
+                            </span>
+                          ) : (
+                            <span style={{ opacity: 0.3 }}>從未訂貨</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '1rem' }}>
+                          {isBlocked ? (
+                            <span style={{ color: 'var(--danger-color)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.9rem' }}><ShieldAlert size={14} /> 已封鎖</span>
+                          ) : (
+                            <span style={{ color: 'var(--success-color)', fontSize: '0.9rem' }}>正常</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '1rem' }}>
+                          <button 
+                            onClick={() => handleToggleBlock(cust.Account, cust.IsBlocked)}
+                            className={`btn ${isBlocked ? 'btn-primary' : 'btn-outline'}`}
+                            style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', minWidth: '80px', borderColor: isBlocked ? '' : 'var(--danger-color)', color: isBlocked ? '' : 'var(--danger-color)' }}
+                          >
+                            {isBlocked ? '🔓 解鎖' : '⛔ 封鎖'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'security' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '2rem' }} className="mobile-stack">
               <div className="glass-panel">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
                       <ShieldAlert color="var(--danger-color)" />
-                      <h3 style={{ margin: 0 }}>近期登入監視器</h3>
+                      <h3 style={{ margin: 0 }}>近期登入監視器 (Anti-Bot)</h3>
                   </div>
                   
-                  <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                  <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
                       {loginLogs.length === 0 ? (
                           <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '2rem' }}>目前無任何登入日誌</div>
                       ) : (
@@ -485,6 +592,34 @@ export default function Admin() {
                               ))}
                           </div>
                       )}
+                  </div>
+              </div>
+
+              <div className="glass-panel">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                      <XCircle color="var(--danger-color)" />
+                      <h3 style={{ margin: 0 }}>異常帳號快速封鎖</h3>
+                  </div>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>此處顯示多次嘗試失敗或被系統自動標記的帳號。</p>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                      {customers
+                        .filter(c => (c.FailedAttempts > 0) || (c.IsBlocked == "1" || c.IsBlocked === true || c.IsBlocked === "TRUE"))
+                        .map((c, idx) => (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                             <div>
+                                <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{c.Account}</div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>失敗次數: {c.FailedAttempts || 0}</div>
+                             </div>
+                             <button 
+                               onClick={() => handleToggleBlock(c.Account, c.IsBlocked)}
+                               className="btn btn-outline"
+                               style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', borderColor: 'var(--danger-color)', color: 'var(--danger-color)' }}
+                             >
+                               {(c.IsBlocked == "1" || c.IsBlocked === true || c.IsBlocked === "TRUE") ? '🔓 解鎖' : '⛔ 封鎖'}
+                             </button>
+                          </div>
+                        ))}
                   </div>
               </div>
           </div>

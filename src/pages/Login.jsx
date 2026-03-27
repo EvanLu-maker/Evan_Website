@@ -10,10 +10,17 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const [turnstileToken, setTurnstileToken] = useState('');
+
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!account || !password) {
       setError('請輸入帳號密碼');
+      return;
+    }
+
+    if (!turnstileToken) {
+      setError('請完成機器人驗證');
       return;
     }
     
@@ -21,24 +28,8 @@ export default function Login() {
     setError('');
     
     try {
-      let recaptchaToken = null;
-      if (window.grecaptcha && window.grecaptcha.ready) {
-         try {
-             // 如果還沒填入正式 Key，直接跳過驗證避免卡住
-             if ('YOUR_RECAPTCHA_SITE_KEY' !== 'YOUR_RECAPTCHA_SITE_KEY') {
-                 recaptchaToken = await new Promise((resolve, reject) => {
-                     window.grecaptcha.ready(() => {
-                         window.grecaptcha.execute('YOUR_RECAPTCHA_SITE_KEY', {action: 'login'}).then(resolve).catch(reject);
-                     });
-                 });
-             }
-         } catch(rcErr) {
-             console.warn("reCAPTCHA 發生錯誤或尚未設定 Key", rcErr);
-         }
-      }
-
       // 呼叫 Google Apps Script 登入 API
-      const res = await api.login(account, password, recaptchaToken);
+      const res = await api.login(account, password, turnstileToken);
       
       // 成功後將使用者狀態寫入 sessionStorage，保護資料
       sessionStorage.setItem('user', JSON.stringify(res.user));
@@ -47,10 +38,28 @@ export default function Login() {
       navigate('/shop');
     } catch (err) {
       setError(err.message || '登入失敗，請檢查帳號密碼');
+      // 失敗時可以重新載入驗證碼 (如果有需要)
     } finally {
       setLoading(false);
     }
   };
+
+  React.useEffect(() => {
+    // 延遲渲染確保 script 已載入
+    const checkTurnstile = setInterval(() => {
+      if (window.turnstile) {
+        clearInterval(checkTurnstile);
+        window.turnstile.render('#turnstile-container', {
+          sitekey: '1x00000000000000000000AA', // 測試專用 Key，正式環境請換成您自己的
+          callback: (token) => {
+            setTurnstileToken(token);
+            setError('');
+          },
+        });
+      }
+    }, 500);
+    return () => clearInterval(checkTurnstile);
+  }, []);
 
   return (
     <div className="glass-panel animate-fade-in" style={{ maxWidth: '400px', margin: '4rem auto', textAlign: 'center' }}>
@@ -78,6 +87,9 @@ export default function Login() {
             disabled={loading}
           />
         </div>
+
+        {/* Cloudflare Turnstile 容器 */}
+        <div id="turnstile-container" style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}></div>
         
         {error && (
           <div style={{ color: 'var(--danger-color)', marginBottom: '1rem', fontSize: '0.875rem' }}>

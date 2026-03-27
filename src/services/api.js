@@ -28,8 +28,8 @@ export const apiCall = async (action, payload = {}) => {
 };
 
 export const api = {
-  login: (account, password, recaptchaToken = null) => 
-    apiCall('login', { account, password, recaptchaToken }),
+  login: (account, password, turnstileToken = null) => 
+    apiCall('login', { account, password, turnstileToken }),
     
   getProducts: (customerToken) => 
     apiCall('getProducts', { customerToken }),

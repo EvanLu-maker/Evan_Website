@@ -9,8 +9,11 @@ function initializeDatabase() {
   
   // customers
   let cS = getSheet("customers") || ss.insertSheet("customers");
-  if(cS.getLastRow() < 1) cS.getRange(1, 1, 1, 8).setValues([["Account", "Password", "Token", "IsAdmin", "Email", "Phone", "IsBlocked", "FailedAttempts"]]);
-  if(cS.getLastRow() < 2) cS.appendRow(["evan", "1234", "T-001", "1", "evan@example.com", "0912-345-678", 0, 0]);
+  if(cS.getLastRow() < 1) cS.getRange(1, 1, 1, 9).setValues([["Account", "Password", "Token", "IsAdmin", "Email", "Phone", "IsBlocked", "FailedAttempts", "Salt"]]);
+  if(cS.getLastRow() < 2) {
+      const salt = Utilities.getUuid();
+      cS.appendRow(["evan", hashPassword("1234", salt), "T-001", "1", "evan@example.com", "0912-345-678", 0, 0, salt]);
+  }
   
   // Products
   let pS = getSheet("Products") || ss.insertSheet("Products");
@@ -70,7 +73,7 @@ function doPost(e) {
   try {
     const b = JSON.parse(e.postData.contents);
     switch(b.action) {
-      case 'login': return res(handleLogin(b.account, b.password));
+      case 'login': return res(handleLogin(b.account, b.password, b.turnstileToken));
       case 'getProducts': return res(getProducts(b.customerToken));
       case 'submitOrder': return res(submitOrder(b.customerToken, b.ordersData));
       case 'getMyOrders': return res(getMyOrders(b.customerToken));
@@ -94,7 +97,13 @@ function logLogin(account, status, msg) {
   }
 }
 
-function handleLogin(account, password) {
+function handleLogin(account, password, turnstileToken) {
+  // 1. 驗證 Anti-Bot Token (Cloudflare Turnstile)
+  if (!verifyTurnstile(turnstileToken)) {
+      logLogin(account, "失敗", "未通過機器人驗證程序");
+      return {status: 'error', message: '請完成網頁上的機器人驗證程序'};
+  }
+
   const sheet = getSheet("customers");
   if (!sheet) return {status: 'error', message: '找不到 customers 工作表'};
   
@@ -106,6 +115,7 @@ function handleLogin(account, password) {
   const colPhone = getColIdx(sheet, ["Phone", "電話", "手機"]);
   const colBlocked = getColIdx(sheet, ["IsBlocked", "已封鎖", "黑名單"]);
   const colFailed = getColIdx(sheet, ["FailedAttempts", "失敗次數"]);
+  const colSalt = getColIdx(sheet, ["Salt", "鹽值"]);
   
   if (colA === -1) return {status: 'error', message: '找不到「帳號」欄位'};
 
@@ -123,7 +133,16 @@ function handleLogin(account, password) {
         return {status: 'error', message: '此帳號已遭系統鎖定，請聯絡管理員解除封鎖'};
       }
 
-      if(String(data[i][colP]).trim() === String(password).trim()) {
+      // 密碼比對 (雜湊 vs 明碼)
+      const storedPassword = String(data[i][colP]).trim();
+      const salt = colSalt > -1 ? String(data[i][colSalt]) : "";
+      const inputHash = hashPassword(password, salt);
+      
+      // 支援舊有明碼過渡 (如果 storedPassword 不是 64 位元 Hex)
+      const isHashed = storedPassword.length === 64 && /^[0-9a-f]+$/i.test(storedPassword);
+      const isMatch = isHashed ? (storedPassword === inputHash) : (storedPassword === String(password).trim());
+
+      if(isMatch) {
         // 成功，重置失敗次數
         if (colFailed > -1) sheet.getRange(i+1, colFailed+1).setValue(0);
         
@@ -435,8 +454,14 @@ function addCustomer(adminToken, customerData) {
     "可購產品": customerData.allowedProducts, // 逗號分隔字串
     "IsAdmin": 0,
     "FailedAttempts": 0,
-    "IsBlocked": 0
+    "IsBlocked": 0,
+    "Salt": Utilities.getUuid()
   };
+  
+  // 核心：儲存前先雜湊
+  const hPass = hashPassword(randomPassword, fields["Salt"]);
+  fields["Password"] = hPass;
+  fields["密碼"] = hPass;
 
   for (let j=0; j<headers.length; j++) {
     const h = String(headers[j]).trim();
@@ -506,4 +531,86 @@ function getAdminDashboardData(token) {
 
 function res(data) {
   return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// ============================================
+// 安全強化工具函式 (Security Utilities)
+// ============================================
+
+/**
+ * 密碼雜湊處理 (SHA-256 + Salt)
+ */
+function hashPassword(password, salt) {
+  if (!password) return "";
+  const cryptoData = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, password + salt, Utilities.Charset.UTF_8);
+  let hash = "";
+  for (let i = 0; i < cryptoData.length; i++) {
+    let byte = cryptoData[i];
+    if (byte < 0) byte += 256;
+    let byteStr = byte.toString(16);
+    if (byteStr.length === 1) byteStr = "0" + byteStr;
+    hash += byteStr;
+  }
+  return hash;
+}
+
+/**
+ * 驗證 Cloudflare Turnstile Token
+ */
+function verifyTurnstile(token) {
+  if (!token) return false;
+  // 測試環境 Sitekey 永遠通過 (僅供開發測試)
+  if (token === "XX_TEST_TOKEN_XX") return true; 
+  
+  const secretKey = "1x0000000000000000000000000000000AA"; // 請在此處填入您的 Secret Key (Cloudflare 後台取得)
+  const url = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+  
+  try {
+    const response = UrlFetchApp.fetch(url, {
+      method: "post",
+      payload: {
+        secret: secretKey,
+        response: token
+      }
+    });
+    const result = JSON.parse(response.getContentText());
+    return result.success;
+  } catch (e) {
+    console.error("Turnstile Error:", e);
+    return false;
+  }
+}
+
+/**
+ * [一次性腳本] 將現有的明碼密碼全數遷移為雜湊加密
+ * 請在 Apps Script 編輯器中手動執行此函式
+ */
+function migratePlainPasswordsToHashes() {
+  const sheet = getSheet("customers");
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  
+  const colP = getColIdx(sheet, ["Password", "密碼"]);
+  let colSalt = getColIdx(sheet, ["Salt", "鹽值"]);
+  
+  // 如果沒有 Salt 欄位，自動加上
+  if (colSalt === -1) {
+    sheet.getRange(1, headers.length + 1).setValue("Salt");
+    colSalt = headers.length;
+  }
+  
+  for (let i = 1; i < data.length; i++) {
+    let pwd = String(data[i][colP]).trim();
+    // 檢查是否已經是雜湊值 (64位元 Hex)
+    const isHashed = pwd.length === 64 && /^[0-9a-f]+$/i.test(pwd);
+    
+    if (!isHashed && pwd !== "") {
+      const salt = Utilities.getUuid();
+      const hashed = hashPassword(pwd, salt);
+      sheet.getRange(i + 1, colP + 1).setValue(hashed);
+      sheet.getRange(i + 1, colSalt + 1).setValue(salt);
+      console.log("Migrated user: " + data[i][0]);
+    }
+  }
+  return "遷移完成！";
 }
