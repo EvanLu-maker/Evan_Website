@@ -11,6 +11,7 @@ export default function Admin() {
   const [loginLogs, setLoginLogs] = useState([]);
   
   const [loading, setLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState('orders'); // 'orders', 'products', 'customers'
   const [error, setError] = useState('');
   
@@ -31,6 +32,22 @@ export default function Admin() {
   const [sortConfig, setSortConfig] = useState({ key: 'TargetShipDate', direction: 'asc' });
 
   useEffect(() => {
+    // 優先讀取本地快取，實現「秒開」
+    const cachedOrders = localStorage.getItem('admin_orders');
+    const cachedProducts = localStorage.getItem('admin_products');
+    const cachedCustomers = localStorage.getItem('admin_customers');
+    const cachedLogs = localStorage.getItem('admin_logs');
+
+    if (cachedOrders) setOrders(JSON.parse(cachedOrders));
+    if (cachedProducts) setProducts(JSON.parse(cachedProducts));
+    if (cachedCustomers) setCustomers(JSON.parse(cachedCustomers));
+    if (cachedLogs) setLoginLogs(JSON.parse(cachedLogs));
+
+    // 如果有舊資料，就先關掉全螢幕加載
+    if (cachedOrders && cachedProducts) {
+      setLoading(false);
+    }
+
     const user = JSON.parse(sessionStorage.getItem('user'));
     if (!user) {
       navigate('/');
@@ -48,20 +65,30 @@ export default function Admin() {
   }, [navigate]);
 
   const fetchData = async (token) => {
-    setLoading(true);
+    if (!token) return;
+    setIsSyncing(true);
     setError('');
     try {
       // 策略：優先使用統一介面 (一次載入全部)，減少連線開銷
       try {
         const dashboardData = await api.getAdminDashboardData(token);
+        
+        // 更新狀態
         setOrders(dashboardData.orders || []);
         setProducts(dashboardData.products || []);
         setCustomers(dashboardData.customers || []);
         setLoginLogs(dashboardData.logs || []);
-        console.log('✅ 統一數據載入完成');
+
+        // 寫入快取
+        localStorage.setItem('admin_orders', JSON.stringify(dashboardData.orders || []));
+        localStorage.setItem('admin_products', JSON.stringify(dashboardData.products || []));
+        localStorage.setItem('admin_customers', JSON.stringify(dashboardData.customers || []));
+        localStorage.setItem('admin_logs', JSON.stringify(dashboardData.logs || []));
+
+        console.log('✅ 統一數據載入完成且已緩存');
       } catch (e) {
         console.warn('Unified endpoint failed, falling back to parallel fetch:', e);
-        // 備援計畫：並行載入 (Parallel) 而非序列載入
+        // 備援計畫：並行載入 (Parallel)
         const [orderRes, productRes, custRes, logsRes] = await Promise.all([
           api.getMyOrders(token),
           api.getProducts(token),
@@ -69,16 +96,27 @@ export default function Admin() {
           api.getLoginLogs(token).catch(() => ({data: []}))
         ]);
 
-        setOrders(orderRes.data || []);
-        setProducts(productRes.data || []);
-        setCustomers(custRes.data || []);
-        setLoginLogs(logsRes.data || []);
+        const o = orderRes.data || [];
+        const p = productRes.data || [];
+        const c = custRes.data || [];
+        const l = logsRes.data || [];
+
+        setOrders(o);
+        setProducts(p);
+        setCustomers(c);
+        setLoginLogs(l);
+
+        localStorage.setItem('admin_orders', JSON.stringify(o));
+        localStorage.setItem('admin_products', JSON.stringify(p));
+        localStorage.setItem('admin_customers', JSON.stringify(c));
+        localStorage.setItem('admin_logs', JSON.stringify(l));
       }
     } catch (err) {
       console.error(err);
       setError(err.message || '加載失敗，請確保權限或試算表狀態正確。');
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
   };
 
@@ -211,7 +249,15 @@ export default function Admin() {
     });
   };
 
-  if (loading) return <div style={{height:'100vh', display:'flex', justifyContent:'center', alignItems:'center'}}><Loader2 className="animate-spin" size={48} /></div>;
+  const SkeletonRow = ({ cols = 7 }) => (
+    <tr>
+      <td colSpan={cols} style={{ padding: '0.8rem' }}>
+        <div className="skeleton" style={{ height: '2.5rem', width: '100%' }}></div>
+      </td>
+    </tr>
+  );
+
+  if (loading && orders.length === 0) return <div style={{height:'100vh', display:'flex', justifyContent:'center', alignItems:'center'}}><Loader2 className="animate-spin" size={48} /></div>;
 
   return (
     <>
@@ -225,7 +271,8 @@ export default function Admin() {
               <button onClick={() => setActiveTab('products')} className={`btn ${activeTab === 'products' ? 'btn-primary' : 'btn-outline'}`}>庫存與商品</button>
               <button onClick={() => setActiveTab('customers')} className={`btn ${activeTab === 'customers' ? 'btn-primary' : 'btn-outline'}`}>資安與客戶管理</button>
               <button onClick={() => fetchData(adminToken)} className="btn btn-outline" title="同步最新數據">
-                <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
+                {isSyncing && <span style={{ marginLeft: '8px', fontSize: '0.8rem' }}>同步中...</span>}
               </button>
               <button onClick={() => navigate('/shop')} className="btn btn-outline" style={{ marginLeft: 'auto' }}>回前台</button>
            </div>
@@ -266,33 +313,37 @@ export default function Admin() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredAndSortedOrders.map((order, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                      <td style={{ padding: '1rem' }}>{new Date(order.Timestamp).toLocaleDateString()}</td>
-                      <td style={{ padding: '1rem' }}>
-                        <div style={{ fontWeight: '500', color: 'var(--primary-color)' }}>{getCustomerName(order.CustomerToken)}</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{order.CustomerToken}</div>
-                      </td>
-                      <td style={{ padding: '1rem' }}>{order.ProductID}</td>
-                      <td style={{ padding: '1rem' }}>{order.Quantity} {order.Unit || ''}</td>
-                      <td style={{ padding: '1rem' }}>{order.TargetShipDate ? new Date(order.TargetShipDate).toLocaleDateString() : '未指定'}</td>
-                      <td style={{ padding: '1rem' }}>
-                         <span style={{ 
-                           padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem',
-                           background: order.Status === '待處理' ? 'rgba(88,166,255,0.2)' : 'rgba(46,160,67,0.2)'
-                         }}>
-                           {order.Status}
-                         </span>
-                      </td>
-                      <td style={{ padding: '1rem' }}>
-                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                           <button title="核准" onClick={() => updateOrderStatus(idx, '已核准')} style={{ background: 'transparent', border: 'none', color: 'var(--success-color)', cursor: 'pointer' }}><CheckCircle size={18} /></button>
-                           <button title="取消" onClick={() => updateOrderStatus(idx, '已取消')} style={{ background: 'transparent', border: 'none', color: 'var(--danger-color)', cursor: 'pointer' }}><XCircle size={18} /></button>
-                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredAndSortedOrders.length === 0 && (
+                  {loading && orders.length === 0 ? (
+                    [...Array(5)].map((_, i) => <SkeletonRow key={i} />)
+                  ) : (
+                    filteredAndSortedOrders.map((order, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <td style={{ padding: '1rem' }}>{new Date(order.Timestamp).toLocaleDateString()}</td>
+                        <td style={{ padding: '1rem' }}>
+                          <div style={{ fontWeight: '500', color: 'var(--primary-color)' }}>{getCustomerName(order.CustomerToken)}</div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{order.CustomerToken}</div>
+                        </td>
+                        <td style={{ padding: '1rem' }}>{order.ProductID}</td>
+                        <td style={{ padding: '1rem' }}>{order.Quantity} {order.Unit || ''}</td>
+                        <td style={{ padding: '1rem' }}>{order.TargetShipDate ? new Date(order.TargetShipDate).toLocaleDateString() : '未指定'}</td>
+                        <td style={{ padding: '1rem' }}>
+                           <span style={{ 
+                             padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem',
+                             background: order.Status === '待處理' ? 'rgba(88,166,255,0.2)' : 'rgba(46,160,67,0.2)'
+                           }}>
+                             {order.Status}
+                           </span>
+                        </td>
+                        <td style={{ padding: '1rem' }}>
+                           <div style={{ display: 'flex', gap: '0.5rem' }}>
+                             <button title="核准" onClick={() => updateOrderStatus(idx, '已核准')} style={{ background: 'transparent', border: 'none', color: 'var(--success-color)', cursor: 'pointer' }}><CheckCircle size={18} /></button>
+                             <button title="取消" onClick={() => updateOrderStatus(idx, '已取消')} style={{ background: 'transparent', border: 'none', color: 'var(--danger-color)', cursor: 'pointer' }}><XCircle size={18} /></button>
+                           </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                  {!loading && filteredAndSortedOrders.length === 0 && (
                     <tr>
                       <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>無相符的訂單資料</td>
                     </tr>
