@@ -51,5 +51,11 @@ export const api = {
     apiCall('getCustomers', { customerToken }),
     
   toggleUserBlock: (customerToken, targetAccount, isBlocked) =>
-    apiCall('toggleUserBlock', { customerToken, targetAccount, isBlocked })
+    apiCall('toggleUserBlock', { customerToken, targetAccount, isBlocked }),
+    
+  addCustomer: (customerToken, customerData) =>
+    apiCall('addCustomer', { customerToken, customerData }),
+    
+  addProduct: (customerToken, productData) =>
+    apiCall('addProduct', { customerToken, productData })
 };

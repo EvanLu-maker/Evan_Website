@@ -78,6 +78,8 @@ function doPost(e) {
       case 'getLoginLogs': return res(getLoginLogs(b.customerToken));
       case 'toggleUserBlock': return res(toggleUserBlock(b.customerToken, b.targetAccount, b.isBlocked));
       case 'getCustomers': return res(getCustomers(b.customerToken));
+      case 'addCustomer': return res(addCustomer(b.customerToken, b.customerData));
+      case 'addProduct': return res(addProduct(b.customerToken, b.productData));
       default: return res({status: 'error', message: '未知 Action'});
     }
   } catch(err) { return res({status: 'error', message: err.toString()}); }
@@ -396,6 +398,89 @@ function toggleUserBlock(customerToken, targetAccount, isBlockedBoolean) {
     }
   }
   return {status: 'error', message: '找不到此用戶'};
+}
+
+function addCustomer(adminToken, customerData) {
+  if (!isAdminToken(adminToken)) return {status: 'error', message: '權限不足'};
+
+  const sheet = getSheet("customers");
+  const data = sheet.getDataRange().getValues();
+  const colA = getColIdx(sheet, ["帳號", "Account"]);
+  
+  // 檢查帳號是否重複
+  for(let i=1; i<data.length; i++) {
+    if(String(data[i][colA]).toLowerCase() === String(customerData.account).toLowerCase()) {
+      return {status: 'error', message: '該帳號已存在'};
+    }
+  }
+
+  // 生成密碼與 Token
+  const randomPassword = generateRandomPassword();
+  const token = 'T-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+
+  const headers = data[0];
+  const newRow = new Array(headers.length).fill('');
+  
+  // 智慧配對寫入
+  const fields = {
+    "帳號": customerData.account,
+    "Account": customerData.account,
+    "密碼": randomPassword,
+    "Password": randomPassword,
+    "Token": token,
+    "代碼": token,
+    "店名": customerData.companyName,
+    "公司名稱": customerData.companyName,
+    "可購產品": customerData.allowedProducts, // 逗號分隔字串
+    "IsAdmin": 0,
+    "FailedAttempts": 0,
+    "IsBlocked": 0
+  };
+
+  for (let j=0; j<headers.length; j++) {
+    const h = String(headers[j]).trim();
+    if (fields[h] !== undefined) newRow[j] = fields[h];
+  }
+
+  sheet.appendRow(newRow);
+  return {status: 'success', message: '新增客戶成功！', password: randomPassword};
+}
+
+function addProduct(adminToken, productData) {
+  if (!isAdminToken(adminToken)) return {status: 'error', message: '權限不足'};
+
+  const sheet = getSheet("Products");
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const newRow = new Array(headers.length).fill('');
+
+  const fields = {
+    "品名": productData.name,
+    "商品名稱": productData.name,
+    "Name": productData.name,
+    "MinQty": productData.minQty || 0,
+    "MaxQty": productData.maxQty || 0,
+    "Unit": productData.unit || '桶',
+    "LeadTime": productData.leadTime || 1,
+    "Price": 0 // 依據先前需求，價格設為 0
+  };
+
+  for (let j=0; j<headers.length; j++) {
+    const h = String(headers[j]).trim();
+    if (fields[h] !== undefined) newRow[j] = fields[h];
+  }
+
+  sheet.appendRow(newRow);
+  return {status: 'success', message: '新增商品成功！'};
+}
+
+function generateRandomPassword() {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"; // 排除易混淆字元
+  let pass = "";
+  for (let i = 0; i < 8; i++) {
+    pass += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return pass;
 }
 
 function res(data) {
