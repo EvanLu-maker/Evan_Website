@@ -268,7 +268,7 @@ export default function Admin() {
            </div>
            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
               <button onClick={() => setActiveTab('orders')} className={`btn ${activeTab === 'orders' ? 'btn-primary' : 'btn-outline'}`}>訂單追蹤</button>
-              <button onClick={() => setActiveTab('products')} className={`btn ${activeTab === 'products' ? 'btn-primary' : 'btn-outline'}`}>庫存與商品</button>
+              <button onClick={() => setActiveTab('products')} className={`btn ${activeTab === 'products' ? 'btn-primary' : 'btn-outline'}`}>商品</button>
               <button onClick={() => setActiveTab('customers')} className={`btn ${activeTab === 'customers' ? 'btn-primary' : 'btn-outline'}`}>資安與客戶管理</button>
               <button onClick={() => fetchData(adminToken)} className="btn btn-outline" title="同步最新數據">
                 <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
@@ -375,18 +375,22 @@ export default function Admin() {
                       <label className="form-label">品名</label>
                       <input type="text" className="form-input" defaultValue={p.Name || p.品名 || p.商品名稱 || p.Product || p.Item || Object.values(p).find(v => typeof v === 'string' && isNaN(Number(v)))} disabled style={{ opacity: 0.7 }} />
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.8rem' }}>
                       <div className="form-group">
-                        <label className="form-label">備貨天數</label>
-                        <input type="number" className="form-input" defaultValue={p.LeadTime || p.備貨天數 || p.提前天數 || p.準備天數 || p.出貨天數 || 1} disabled style={{ opacity: 0.7 }} />
+                        <label className="form-label">出貨時間</label>
+                        <input type="number" className="form-input" defaultValue={p.出貨時間 || p.LeadTime || p.備貨天數 || p.提前天數 || p.準備天數 || 1} disabled style={{ opacity: 0.7 }} />
                       </div>
                       <div className="form-group">
-                        <label className="form-label">起訂量</label>
-                        <input type="number" className="form-input" defaultValue={p.MinQty || p.起訂量 || p.最小量 || 0} disabled style={{ opacity: 0.7 }} />
+                        <label className="form-label">最小訂購量</label>
+                        <input type="number" className="form-input" defaultValue={p.最小訂購量 || p.MinQty || p.起訂量 || p.最小量 || 0} disabled style={{ opacity: 0.7 }} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">最大量</label>
+                        <input type="number" className="form-input" defaultValue={p.最大訂購量 || p.MaxQty || p.最大量 || 0} disabled style={{ opacity: 0.7 }} />
                       </div>
                       <div className="form-group">
                         <label className="form-label">單位</label>
-                        <input type="text" className="form-input" defaultValue={p.Unit || '包'} disabled style={{ opacity: 0.7 }} />
+                        <input type="text" className="form-input" defaultValue={p.單位 || p.Unit || '包'} disabled style={{ opacity: 0.7 }} />
                       </div>
                     </div>
                  </div>
@@ -563,21 +567,21 @@ export default function Admin() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label className="form-label">單位</label>
-                  <input type="text" className="form-input" value={newProduct.unit} onChange={e => setNewProduct({...newProduct, unit: e.target.value})} placeholder="桶 / 包 / 支" />
+                  <input type="text" className="form-input" value={newProduct.unit} onChange={e => setNewProduct({...newProduct, unit: e.target.value})} placeholder="例如: 桶 / 包 / 支" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">備貨天數 (LeadTime)</label>
-                  <input type="number" className="form-input" value={newProduct.leadTime} onChange={e => setNewProduct({...newProduct, leadTime: parseInt(e.target.value) || 1})} min="1" />
+                  <label className="form-label">出貨時間 (天數)</label>
+                  <input type="number" className="form-input" value={newProduct.leadTime} onChange={e => setNewProduct({...newProduct, leadTime: parseInt(e.target.value) || 1})} min="0" />
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
-                  <label className="form-label">起訂量 (MinQty)</label>
+                  <label className="form-label">最小訂購量</label>
                   <input type="number" className="form-input" value={newProduct.minQty} onChange={e => setNewProduct({...newProduct, minQty: parseInt(e.target.value) || 0})} min="0" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">最大訂購量 (MaxQty)</label>
+                  <label className="form-label">最大訂購量</label>
                   <input type="number" className="form-input" value={newProduct.maxQty} onChange={e => setNewProduct({...newProduct, maxQty: parseInt(e.target.value) || 0})} min="0" />
                 </div>
               </div>

@@ -14,7 +14,7 @@ function initializeDatabase() {
   
   // Products
   let pS = getSheet("Products") || ss.insertSheet("Products");
-  if(pS.getLastRow() < 1) pS.getRange(1, 1, 1, 6).setValues([["Name", "Price", "LeadTime", "MinQty", "MaxQty", "Unit"]]);
+  if(pS.getLastRow() < 1) pS.getRange(1, 1, 1, 6).setValues([["品名", "價格", "出貨時間", "最小訂購量", "最大訂購量", "單位"]]);
   
   // Whitelist
   let wS = getSheet("Whitelist") || ss.insertSheet("Whitelist");
@@ -459,10 +459,18 @@ function addProduct(adminToken, productData) {
     "品名": productData.name,
     "商品名稱": productData.name,
     "Name": productData.name,
+    "最小訂購量": productData.minQty || 0,
+    "起訂量": productData.minQty || 0,
     "MinQty": productData.minQty || 0,
+    "最大訂購量": productData.maxQty || 0,
+    "最大量": productData.maxQty || 0,
     "MaxQty": productData.maxQty || 0,
-    "Unit": productData.unit || '桶',
+    "單位": productData.unit || '包',
+    "Unit": productData.unit || '包',
+    "出貨時間": productData.leadTime || 1,
+    "備貨天數": productData.leadTime || 1,
     "LeadTime": productData.leadTime || 1,
+    "價格": 0,
     "Price": 0 // 依據先前需求，價格設為 0
   };
 

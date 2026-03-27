@@ -58,12 +58,12 @@ export default function Shop() {
     
     // Normalizing keys
     const name = p.Name || p.品名 || p.商品名稱 || p.Product || p.Item || Object.values(p).find(v => typeof v === 'string' && isNaN(Number(v)));
-    const minQty = parseInt(p.MinQty || p.起訂量 || p.最小訂購量 || p.最小量 || 0);
-    const maxQty = parseInt(p.MaxQty || p.最大量 || p.最大訂購量 || 0);
-    const unit = p.Unit || p.單位 || '';
+    const minQty = parseInt(p.最小訂購量 || p.MinQty || p.起訂量 || p.最小量 || 0);
+    const maxQty = parseInt(p.最大訂購量 || p.MaxQty || p.最大量 || 0);
+    const unit = p.單位 || p.Unit || '';
     
     // 取得備貨天數 (LeadTime)
-    const leadTimeRaw = p.LeadTime || p.備貨天數 || p.提前天數 || p.準備天數 || p.出貨天數;
+    const leadTimeRaw = p.出貨時間 || p.LeadTime || p.備貨天數 || p.提前天數 || p.準備天數 || p.出貨天數;
     let leadTime = parseInt(leadTimeRaw, 10);
     if (isNaN(leadTime)) leadTime = 1; // 預設 1 天
     
