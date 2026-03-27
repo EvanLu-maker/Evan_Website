@@ -80,6 +80,7 @@ function doPost(e) {
       case 'getCustomers': return res(getCustomers(b.customerToken));
       case 'addCustomer': return res(addCustomer(b.customerToken, b.customerData));
       case 'addProduct': return res(addProduct(b.customerToken, b.productData));
+      case 'getAdminDashboardData': return res(getAdminDashboardData(b.customerToken));
       default: return res({status: 'error', message: '未知 Action'});
     }
   } catch(err) { return res({status: 'error', message: err.toString()}); }
@@ -481,6 +482,18 @@ function generateRandomPassword() {
     pass += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return pass;
+}
+
+function getAdminDashboardData(token) {
+  if (!isAdminToken(token)) return {status: 'error', message: '權限不足'};
+
+  return {
+    status: 'success',
+    orders: getMyOrders(token).data || [],
+    products: getProducts(token).data || [],
+    customers: getCustomers(token).data || [],
+    logs: getLoginLogs(token).data || []
+  };
 }
 
 function res(data) {
