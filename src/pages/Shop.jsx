@@ -77,8 +77,6 @@ export default function Shop() {
     const d = String(earliestDate.getDate()).padStart(2, '0');
     const earliestDateStr = `${y}-${m}-${d}`;
     
-    console.log(`Product: ${name}, LeadTime: ${leadTime}, Earliest: ${earliestDateStr}`);
-
     return { name, minQty, maxQty, unit, leadTime, earliestDateStr };
   };
 
@@ -181,32 +179,29 @@ export default function Shop() {
     <div className="animate-fade-in" style={{ padding: '2rem 1rem', position: 'relative', maxWidth: '1000px', margin: '0 auto' }}>
       
       {/* 導覽列 */}
-      <nav className="glass-panel" style={{ padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap:'wrap', gap:'1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Package color="var(--primary-color)" />
-          <h2 style={{ color: 'var(--primary-color)', margin: 0 }}>採購大廳</h2>
-        </div>
-        
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap:'wrap' }}>
-          <span style={{ color: 'var(--text-secondary)', marginRight:'10px' }}>歡迎, {user?.account}</span>
-          
-          <Link to="/orders" className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
-            <FileText size={18} /> 我的訂單
-          </Link>
-
-          <Link to="/profile" className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
-            <User size={18} /> 個人資料
-          </Link>
-          
-          {user?.isAdmin && (
-            <Link to="/admin" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
-              <ShieldAlert size={18} /> 管理員後台
-            </Link>
-          )}
-          
-          <button onClick={handleLogout} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--danger-color)', borderColor: 'rgba(248, 81, 73, 0.3)' }}>
+      <nav className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Package color="var(--primary-color)" />
+            <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '1.2rem' }}>採購大廳</h2>
+          </div>
+          <button onClick={handleLogout} className="btn btn-outline" style={{ width: 'auto', padding: '0.4rem 0.8rem', color: 'var(--danger-color)', borderColor: 'rgba(248, 81, 73, 0.3)' }}>
             <LogOut size={16} /> 登出
           </button>
+        </div>
+        
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <Link to="/orders" className="btn btn-outline" style={{ flex: 1, minWidth: '100px', textDecoration: 'none' }}>
+            <FileText size={16} /> 訂單
+          </Link>
+          <Link to="/profile" className="btn btn-outline" style={{ flex: 1, minWidth: '100px', textDecoration: 'none' }}>
+            <User size={16} /> 資料
+          </Link>
+          {user?.isAdmin && (
+            <Link to="/admin" className="btn btn-primary" style={{ flex: 1.5, minWidth: '140px', textDecoration: 'none' }}>
+              <ShieldAlert size={16} /> 管理後台
+            </Link>
+          )}
         </div>
       </nav>
 
@@ -243,11 +238,11 @@ export default function Shop() {
                  const info = getProductInfo(row.productId);
                  
                  return (
-                   <div key={row.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 3fr) minmax(100px, 1fr) minmax(150px, 2fr) 60px', gap: '1rem', alignItems: 'flex-start', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                   <div key={row.id} className="mobile-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 3fr) 120px minmax(150px, 2fr) 60px', gap: '1rem', alignItems: 'flex-start', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '1rem' }}>
                        
                        {/* 商品選擇 */}
-                       <div>
-                           <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>商品</label>
+                       <div style={{ width: '100%' }}>
+                           <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>商品內容</label>
                            <select 
                                className="form-input" 
                                value={row.productId} 
@@ -263,47 +258,48 @@ export default function Shop() {
                            {info && (
                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
                                    {info.minQty > 0 || info.maxQty > 0 ? '限制: ' : ''}
-                                   {info.minQty > 0 ? `起訂 ${info.minQty} ` : ''} 
+                                   {info.minQty > 0 ? `起訂 ${info.minQty}單位 ` : ''} 
                                    {info.maxQty > 0 ? `/ 最大 ${info.maxQty}` : ''}
                                </div>
                            )}
                        </div>
 
-                       {/* 數量輸入 */}
-                       <div>
-                           <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>數量 {info && info.unit ? `(${info.unit})` : ''}</label>
-                           <input 
-                               type="number" 
-                               className="form-input" 
-                               min={info?.minQty > 0 ? info.minQty : 0}
-                               max={info?.maxQty > 0 ? info.maxQty : undefined}
-                               value={row.qty} 
-                               placeholder="數量"
-                               onChange={(e) => updateRow(row.id, 'qty', e.target.value)}
-                           />
-                       </div>
+                       {/* 數量與出貨日 (行動版並排) */}
+                       <div className="mobile-grid-2" style={{ display: 'contents' }}>
+                          <div>
+                              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>數量 {info && info.unit ? `(${info.unit})` : ''}</label>
+                              <input 
+                                  type="number" 
+                                  className="form-input" 
+                                  min={info?.minQty > 0 ? info.minQty : 0}
+                                  max={info?.maxQty > 0 ? info.maxQty : undefined}
+                                  value={row.qty} 
+                                  placeholder="數量"
+                                  onChange={(e) => updateRow(row.id, 'qty', e.target.value)}
+                              />
+                          </div>
 
-                       {/* 出貨日選擇 */}
-                       <div>
-                           <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>配送日期</label>
-                           <input 
-                               type="date" 
-                               className="form-input" 
-                               min={info?.earliestDateStr || ''}
-                               value={row.shipDate} 
-                               onChange={(e) => updateRow(row.id, 'shipDate', e.target.value)}
-                           />
-                           {info && (
-                               <div style={{ fontSize: '0.75rem', color: row.shipDate && row.shipDate < info.earliestDateStr ? 'var(--danger-color)' : 'var(--text-secondary)', marginTop: '4px' }}>
-                                   最快出貨日: {info.earliestDateStr}
-                               </div>
-                           )}
+                          <div>
+                              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>配送日期</label>
+                              <input 
+                                  type="date" 
+                                  className="form-input" 
+                                  min={info?.earliestDateStr || ''}
+                                  value={row.shipDate} 
+                                  onChange={(e) => updateRow(row.id, 'shipDate', e.target.value)}
+                              />
+                              {info && (
+                                  <div style={{ fontSize: '0.7rem', color: row.shipDate && row.shipDate < info.earliestDateStr ? 'var(--danger-color)' : 'var(--text-secondary)', marginTop: '4px' }}>
+                                      最快: {info.earliestDateStr}
+                                  </div>
+                              )}
+                          </div>
                        </div>
 
                        {/* 移除列按鈕 */}
-                       <div style={{ display: 'flex', height: '100%', alignItems: 'center', paddingTop: '18px' }}>
-                           <button onClick={() => removeRow(row.id)} title="移除" style={{ background: 'transparent', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', padding: '8px' }}>
-                               <LogOut size={18} style={{ transform: 'rotate(180deg)' }}/>
+                       <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'flex-end' }}>
+                           <button onClick={() => removeRow(row.id)} title="移除" style={{ background: 'rgba(248, 81, 73, 0.1)', border: '1px solid rgba(248, 81, 73, 0.2)', color: 'var(--danger-color)', cursor: 'pointer', padding: '10px', borderRadius:'8px', display:'flex', alignItems:'center', gap:'4px' }}>
+                               <LogOut size={16} style={{ transform: 'rotate(180deg)' }}/> <span className="mobile-only" style={{ fontSize: '0.85rem' }}>移除</span>
                            </button>
                        </div>
                    </div>
@@ -311,8 +307,8 @@ export default function Shop() {
               })}
            </div>
 
-           <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-               <button onClick={addRow} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+           <div className="mobile-stack" style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+               <button onClick={addRow} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: 'auto' }}>
                    <Plus size={16} /> 新增品項
                </button>
 

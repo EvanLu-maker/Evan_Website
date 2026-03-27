@@ -174,3 +174,54 @@ h1, h2, h3, h4, h5, h6 {
   );
   animation: shimmer 1.5s infinite;
 }
+
+/* 響應式優化助手 (Mobile Responsive Helpers) */
+@media (max-width: 768px) {
+  :root {
+    --glass-padding: 1rem;
+  }
+  
+  body {
+    padding: 0.25rem;
+  }
+  
+  .glass-panel {
+    padding: var(--glass-padding);
+    margin-bottom: 0.75rem;
+  }
+
+  /* 垂直堆疊 Helper */
+  .mobile-stack {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+  }
+
+  /* 2欄格狀 Helper */
+  .mobile-grid-2 {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.75rem !important;
+  }
+
+  /* 隱藏非必要元素 */
+  .mobile-hide {
+    display: none !important;
+  }
+  
+  .btn {
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    width: 100%; /* 手機版按鈕通常滿版較好按 */
+  }
+
+  .form-input {
+    padding: 0.75rem;
+    font-size: 16px !important; /* 防止 iOS Focus 時自動縮放 */
+  }
+
+  /* 強化表格轉卡片類 (通用) */
+  .responsive-container {
+    overflow-x: auto;
+  }
+}

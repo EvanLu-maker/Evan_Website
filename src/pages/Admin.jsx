@@ -262,45 +262,47 @@ export default function Admin() {
   return (
     <>
       <div className="animate-fade-in" style={{ padding: '2rem' }}>
-        <nav className="glass-panel" style={{ padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderLeft: '4px solid var(--danger-color)', flexWrap: 'wrap', gap: '1rem' }}>
+        <nav className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem', borderLeft: '4px solid var(--danger-color)' }}>
            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <h2 style={{ color: 'var(--text-primary)', margin: 0 }}>管理員後台戰情室</h2>
+              <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '1.2rem' }}>管理員後台戰情室</h2>
            </div>
-           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-              <button onClick={() => setActiveTab('orders')} className={`btn ${activeTab === 'orders' ? 'btn-primary' : 'btn-outline'}`}>訂單追蹤</button>
-              <button onClick={() => setActiveTab('products')} className={`btn ${activeTab === 'products' ? 'btn-primary' : 'btn-outline'}`}>商品</button>
-              <button onClick={() => setActiveTab('customers')} className={`btn ${activeTab === 'customers' ? 'btn-primary' : 'btn-outline'}`}>資安與客戶管理</button>
-              <button onClick={() => fetchData(adminToken)} className="btn btn-outline" title="同步最新數據">
-                <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
-                {isSyncing && <span style={{ marginLeft: '8px', fontSize: '0.8rem' }}>同步中...</span>}
-              </button>
-              <button onClick={() => navigate('/shop')} className="btn btn-outline" style={{ marginLeft: 'auto' }}>回前台</button>
+           <div className="mobile-stack" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button onClick={() => setActiveTab('orders')} className={`btn ${activeTab === 'orders' ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1 }}>訂單追蹤</button>
+              <button onClick={() => setActiveTab('products')} className={`btn ${activeTab === 'products' ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1 }}>商品</button>
+              <button onClick={() => setActiveTab('customers')} className={`btn ${activeTab === 'customers' ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1 }}>資安/客戶</button>
+              <div style={{ display: 'flex', gap: '0.5rem', flex: 1.5 }}>
+                <button onClick={() => fetchData(adminToken)} className="btn btn-outline" title="同步最新數據" style={{ flex: 1 }}>
+                  <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
+                  {isSyncing && <span style={{ marginLeft: '8px', fontSize: '0.8rem' }}>同步中...</span>}
+                </button>
+                <button onClick={() => navigate('/shop')} className="btn btn-outline" style={{ flex: 1 }}>前台</button>
+              </div>
            </div>
         </nav>
 
         {activeTab === 'orders' && (
           <div className="glass-panel">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+            <div className="mobile-stack" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
               <h3 style={{ margin: 0 }}>📦 全平台訂單監控</h3>
               
-              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+              <div className="mobile-stack" style={{ display: 'flex', gap: '1rem', alignItems: 'center', width: '100%' }}>
                  <input 
                    type="text" 
                    placeholder="搜尋店名或商品..." 
                    className="form-input" 
-                   style={{ width: '250px', margin: 0 }}
+                   style={{ flex: 1, margin: 0 }}
                    value={searchTerm}
                    onChange={e => setSearchTerm(e.target.value)}
                  />
-                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '0.9rem', whiteSpace: 'nowrap' }}>
                    <input type="checkbox" checked={showOnlyPending} onChange={e => setShowOnlyPending(e.target.checked)} />
                    僅看待處理
                  </label>
               </div>
             </div>
 
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <div className="responsive-container" style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
                 <thead>
                   <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                     <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => requestSort('Timestamp')}>日期 {sortConfig.key === 'Timestamp' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</th>
@@ -375,17 +377,17 @@ export default function Admin() {
                       <label className="form-label">品名</label>
                       <input type="text" className="form-input" defaultValue={p.Name || p.品名 || p.商品名稱 || p.Product || p.Item || Object.values(p).find(v => typeof v === 'string' && isNaN(Number(v)))} disabled style={{ opacity: 0.7 }} />
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.8rem' }}>
+                    <div className="mobile-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.8rem' }}>
                       <div className="form-group">
                         <label className="form-label">出貨時間</label>
                         <input type="number" className="form-input" defaultValue={p.出貨時間 || p.LeadTime || p.備貨天數 || p.提前天數 || p.準備天數 || 1} disabled style={{ opacity: 0.7 }} />
                       </div>
                       <div className="form-group">
-                        <label className="form-label">最小訂購量</label>
+                        <label className="form-label">最小訂購</label>
                         <input type="number" className="form-input" defaultValue={p.最小訂購量 || p.MinQty || p.起訂量 || p.最小量 || 0} disabled style={{ opacity: 0.7 }} />
                       </div>
                       <div className="form-group">
-                        <label className="form-label">最大量</label>
+                        <label className="form-label">最大訂購</label>
                         <input type="number" className="form-input" defaultValue={p.最大訂購量 || p.MaxQty || p.最大量 || 0} disabled style={{ opacity: 0.7 }} />
                       </div>
                       <div className="form-group">
