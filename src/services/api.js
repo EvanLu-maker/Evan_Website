@@ -58,6 +58,9 @@ export const api = {
     
   addProduct: (customerToken, productData) =>
     apiCall('addProduct', { customerToken, productData }),
+
+  updateProduct: (customerToken, productData) =>
+    apiCall('updateProduct', { customerToken, productData }),
     
   getAdminDashboardData: (customerToken) =>
     apiCall('getAdminDashboardData', { customerToken }),

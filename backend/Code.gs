@@ -83,6 +83,7 @@ function doPost(e) {
       case 'getCustomers': return res(getCustomers(b.customerToken));
       case 'addCustomer': return res(addCustomer(b.customerToken, b.customerData));
       case 'addProduct': return res(addProduct(b.customerToken, b.productData));
+      case 'updateProduct': return res(handleUpdateProduct(b.customerToken, b.productData));
       case 'getAdminDashboardData': return res(getAdminDashboardData(b.customerToken));
       case 'updateCustomer': return res(handleUpdateCustomer(b.customerToken, b.customerData));
       case 'resetCustomerPassword': return res(handleResetCustomerPassword(b.customerToken, b.targetAccount));
@@ -840,4 +841,52 @@ function handleResetCustomerPassword(adminToken, targetAccount) {
     }
   }
   return {status: 'error', message: '找不到帳號'};
+}
+
+/**
+ * 修改現有商品資料
+ */
+function handleUpdateProduct(adminToken, productData) {
+  if (!isAdminToken(adminToken)) return {status: 'error', message: '權限不足'};
+
+  const sheet = getSheet("Products");
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const colNameIdx = getColIdx(sheet, ["品名", "商品名稱", "Name", "Product", "Item"]);
+  if (colNameIdx === -1) return {status: 'error', message: '找不到品名欄位，無法更新'};
+
+  for (let i = 1; i < data.length; i++) {
+    // 比對品名 (作為唯一識別碼)
+    if (String(data[i][colNameIdx]).trim().toLowerCase() === String(productData.name).trim().toLowerCase()) {
+      
+      const fields = {
+        "品名": productData.name,
+        "商品名稱": productData.name,
+        "Name": productData.name,
+        "最小訂購量": productData.minQty,
+        "起訂量": productData.minQty,
+        "MinQty": productData.minQty,
+        "最大訂購量": productData.maxQty,
+        "最大量": productData.maxQty,
+        "MaxQty": productData.maxQty,
+        "單位": productData.unit,
+        "Unit": productData.unit,
+        "出貨時間": productData.leadTime,
+        "備貨天數": productData.leadTime,
+        "LeadTime": productData.leadTime,
+        "價格": productData.price || 0,
+        "Price": productData.price || 0
+      };
+
+      // 遍歷所有欄位，如果匹配則更新
+      for (let j = 0; j < headers.length; j++) {
+        const h = String(headers[j]).trim();
+        if (fields[h] !== undefined) {
+          sheet.getRange(i + 1, j + 1).setValue(fields[h]);
+        }
+      }
+      return {status: 'success', message: '商品資料更新成功！'};
+    }
+  }
+  return {status: 'error', message: '找不到該商品名稱'};
 }

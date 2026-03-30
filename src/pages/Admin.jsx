@@ -24,7 +24,9 @@ export default function Admin() {
   
   const [newCustomer, setNewCustomer] = useState({ account: '', companyName: '', allowedProducts: [] });
   const [editingCustomer, setEditingCustomer] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showEditProductModal, setShowEditProductModal] = useState(false);
   const [newProduct, setNewProduct] = useState({ name: '', minQty: 0, maxQty: 0, unit: '包', leadTime: 1 });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -182,18 +184,23 @@ export default function Admin() {
   // --- 客戶資料強化與活動追蹤 ---
   const processedCustomers = useMemo(() => {
     return customers
-      .filter(c => c.Account)
+      .filter(c => (c.Account || c.帳號 || c.account))
       .map(c => {
-        const account = String(c.Account);
+        const accountNum = c.Account || c.帳號 || c.account;
+        const account = String(accountNum).trim();
+        const companyName = String(c.公司名稱 || c.店名 || c.companyName || '').trim();
         
         // 1. 最後登入時間
-        const userLogs = loginLogs.filter(l => l.Account === account && l.Status === '成功');
+        const userLogs = loginLogs.filter(l => String(l.Account || l.帳號 || '').trim() === account && l.Status === '成功');
         const lastLogin = userLogs.length > 0 
           ? new Date(Math.max(...userLogs.map(l => new Date(l.Timestamp).getTime())))
           : null;
         
         // 2. 最後訂貨時間 (從 orders 找最新的一筆)
-        const userOrders = orders.filter(o => o.CustomerToken === account || getCustomerName(o.CustomerToken) === account);
+        const userOrders = orders.filter(o => {
+          const oAcc = String(o.Account || o.帳號 || o.CustomerToken || '').trim();
+          return oAcc === account || getCustomerName(o.CustomerToken) === companyName;
+        });
         const lastOrder = userOrders.length > 0
           ? new Date(Math.max(...userOrders.map(o => new Date(o.Timestamp).getTime())))
           : null;
@@ -207,6 +214,8 @@ export default function Admin() {
 
         return {
           ...c,
+          account,
+          companyName,
           lastLogin,
           lastOrder,
           daysSinceLastOrder
@@ -217,8 +226,8 @@ export default function Admin() {
   // --- 客戶清單過濾與排序 ---
   const filteredAndSortedCustomers = useMemo(() => {
     let result = processedCustomers.filter(c => {
-      const matchSearch = String(c.Account).toLowerCase().includes(searchTermCustomer.toLowerCase()) || 
-                          String(c.公司名稱 || c.店名 || '').toLowerCase().includes(searchTermCustomer.toLowerCase());
+      const matchSearch = c.account.toLowerCase().includes(searchTermCustomer.toLowerCase()) || 
+                          c.companyName.toLowerCase().includes(searchTermCustomer.toLowerCase());
       return matchSearch;
     });
 
@@ -298,6 +307,23 @@ export default function Admin() {
       setNewProduct({ name: '', minQty: 0, maxQty: 0, unit: '包', leadTime: 1 });
     } catch (err) {
       alert('建立失敗：' + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateProduct = async (e) => {
+    e.preventDefault();
+    if (!editingProduct.name) return alert('請填寫品名');
+    
+    setIsSubmitting(true);
+    try {
+      await api.updateProduct(adminToken, editingProduct);
+      alert('商品資料更新成功！');
+      fetchData(adminToken);
+      setShowEditProductModal(false);
+    } catch (err) {
+      alert('更新失敗：' + err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -491,11 +517,32 @@ export default function Admin() {
             
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>商品詳細資料（包含起訂量、最高量）可直接在此查看。</p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem', marginTop: '1.5rem' }}>
-               {products.map((p, idx) => (
-                 <div key={idx} style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'rgba(0,0,0,0.1)' }}>
+               {products.map((p, idx) => {
+                 const pName = p.Name || p.品名 || p.商品名稱 || p.Product || p.Item || Object.values(p).find(v => typeof v === 'string' && isNaN(Number(v)));
+                 return (
+                 <div key={idx} style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'rgba(0,0,0,0.1)', position: 'relative' }}>
+                    <div style={{ position: 'absolute', top: '10px', right: '10px' }}>
+                      <button 
+                        onClick={() => {
+                          setEditingProduct({
+                            name: pName,
+                            minQty: parseInt(p.最小訂購量 || p.MinQty || p.起訂量 || p.最小量 || 0),
+                            maxQty: parseInt(p.最大訂購量 || p.MaxQty || p.最大量 || 0),
+                            unit: p.單位 || p.Unit || '包',
+                            leadTime: parseInt(p.出貨時間 || p.LeadTime || p.備貨天數 || p.提前天數 || p.準備天數 || 1)
+                          });
+                          setShowEditProductModal(true);
+                        }}
+                        className="btn btn-outline"
+                        style={{ padding: '0.3rem', minWidth: 'auto' }}
+                        title="編輯商品"
+                      >
+                        <Edit size={14} />
+                      </button>
+                    </div>
                     <div className="form-group">
                       <label className="form-label">品名</label>
-                      <input type="text" className="form-input" defaultValue={p.Name || p.品名 || p.商品名稱 || p.Product || p.Item || Object.values(p).find(v => typeof v === 'string' && isNaN(Number(v)))} disabled style={{ opacity: 0.7 }} />
+                      <input type="text" className="form-input" defaultValue={pName} disabled style={{ opacity: 0.7 }} />
                     </div>
                     <div className="mobile-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.8rem' }}>
                       <div className="form-group">
@@ -516,7 +563,7 @@ export default function Admin() {
                       </div>
                     </div>
                  </div>
-               ))}
+               );})}
             </div>
           </div>
         )}
@@ -864,6 +911,50 @@ export default function Admin() {
                 <button type="button" onClick={() => setShowProductModal(false)} className="btn btn-outline" style={{ flex: 1 }}>取消</button>
                 <button type="submit" disabled={isSubmitting} className="btn btn-primary" style={{ flex: 2 }}>
                   {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : '確認上架商品'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* --- 編輯商品彈窗 --- */}
+      {showEditProductModal && editingProduct && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: '2rem' }}>
+          <div className="glass-panel animate-fade-in" style={{ maxWidth: '500px', width: '100%', border: '1px solid var(--primary-color)' }}>
+            <h3 style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.5rem' }}>✏️ 編輯商品資料</h3>
+            
+            <form onSubmit={handleUpdateProduct}>
+              <div className="form-group">
+                <label className="form-label">商品品名 (不可修改)</label>
+                <input type="text" className="form-input" value={editingProduct.name} disabled style={{ opacity: 0.6 }} />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div className="form-group">
+                  <label className="form-label">單位</label>
+                  <input type="text" className="form-input" value={editingProduct.unit} onChange={e => setEditingProduct({...editingProduct, unit: e.target.value})} placeholder="例如: 桶 / 包 / 支" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">出貨時間 (天數)</label>
+                  <input type="number" className="form-input" value={editingProduct.leadTime} onChange={e => setEditingProduct({...editingProduct, leadTime: parseInt(e.target.value) || 0})} min="0" />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div className="form-group">
+                  <label className="form-label">最小訂購量</label>
+                  <input type="number" className="form-input" value={editingProduct.minQty} onChange={e => setEditingProduct({...editingProduct, minQty: parseInt(e.target.value) || 0})} min="0" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">最大訂購量</label>
+                  <input type="number" className="form-input" value={editingProduct.maxQty} onChange={e => setEditingProduct({...editingProduct, maxQty: parseInt(e.target.value) || 0})} min="0" />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+                <button type="button" onClick={() => setShowEditProductModal(false)} className="btn btn-outline" style={{ flex: 1 }}>取消</button>
+                <button type="submit" disabled={isSubmitting} className="btn btn-primary" style={{ flex: 2 }}>
+                  {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : '儲存變更'}
                 </button>
               </div>
             </form>
