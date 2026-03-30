@@ -149,21 +149,6 @@ export default function Admin() {
     }
   };
 
-  // 取得客戶顯示名稱
-  const getCustomerName = (token) => {
-    const c = customers.find(item => String(item.Token) === String(token));
-    if (!c) return token;
-    return c.公司名稱 || c.店名 || c.Account || token;
-  };
-
-  // 處理排序點擊
-  const requestSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
-    setSortConfig({ key, direction });
-  };
 
   // 訂單過濾與排序邏輯
   const filteredAndSortedOrders = useMemo(() => {
