@@ -39,10 +39,13 @@ export default function Admin() {
 
   // 新增搜尋、過濾與排序狀態
   const [searchTerm, setSearchTerm] = useState('');
-  useEffect(() => { setCurrentPage(1); setSelectedOrders(new Set()); }, [searchTerm, showOnlyPending]);
-
   const [showOnlyPending, setShowOnlyPending] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'TargetShipDate', direction: 'asc' });
+
+  useEffect(() => { 
+    setCurrentPage(1); 
+    setSelectedOrders(new Set()); 
+  }, [searchTerm, showOnlyPending]);
   
   // 客戶清單專用搜尋與排序
   const [searchTermCustomer, setSearchTermCustomer] = useState('');
