@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { Package, Loader2, CheckCircle, XCircle, Clock, Save, RefreshCw, Trash2, Users, ShieldAlert, Plus, Edit, Key } from 'lucide-react';
+import { Package, Loader2, CheckCircle, XCircle, Clock, Save, RefreshCw, Trash2, Users, ShieldAlert, Plus, Edit, Key, Truck } from 'lucide-react';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -15,7 +15,12 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState('orders'); // 'orders', 'products', 'customers', 'security'
   const [error, setError] = useState('');
   
+
   const [adminToken, setAdminToken] = useState('ADMIN');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedOrders, setSelectedOrders] = useState(new Set());
+  const itemsPerPage = 10;
+
   
   // 新增管理功能狀態
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -34,6 +39,8 @@ export default function Admin() {
 
   // 新增搜尋、過濾與排序狀態
   const [searchTerm, setSearchTerm] = useState('');
+  useEffect(() => { setCurrentPage(1); setSelectedOrders(new Set()); }, [searchTerm, showOnlyPending]);
+
   const [showOnlyPending, setShowOnlyPending] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'TargetShipDate', direction: 'asc' });
   
@@ -419,7 +426,49 @@ export default function Admin() {
     }
   };
 
+
+  const handleToggleOrderSelection = (order) => {
+    const key = `${order.Timestamp}-${order.CustomerToken}-${order.ProductID}`;
+    const newSelected = new Set(selectedOrders);
+    if (newSelected.has(key)) newSelected.delete(key);
+    else newSelected.add(key);
+    setSelectedOrders(newSelected);
+  };
+
+  const handleToggleAllOrders = (currentItems) => {
+    const allInPageKeys = currentItems.map(o => `${o.Timestamp}-${o.CustomerToken}-${o.ProductID}`);
+    const allSelected = allInPageKeys.every(k => selectedOrders.has(k));
+    const newSelected = new Set(selectedOrders);
+    
+    if (allSelected) {
+      allInPageKeys.forEach(k => newSelected.delete(k));
+    } else {
+      allInPageKeys.forEach(k => newSelected.add(k));
+    }
+    setSelectedOrders(newSelected);
+  };
+
+  const handleBatchUpdateStatus = async (newStatus) => {
+    if (!window.confirm(`確定要將選取的 ${selectedOrders.size} 筆訂單更新為 [${newStatus}] 嗎？`)) return;
+    setIsSyncing(true);
+    try {
+      const ordersToUpdate = orders.filter(o => {
+        const key = `${o.Timestamp}-${o.CustomerToken}-${o.ProductID}`;
+        return selectedOrders.has(key);
+      });
+      await api.batchUpdateOrderStatus(adminToken, ordersToUpdate, newStatus);
+      alert('批次更新成功！');
+      setSelectedOrders(new Set());
+      fetchData(adminToken);
+    } catch (err) {
+      alert('更新失敗：' + err.message);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const SkeletonRow = ({ cols = 7 }) => (
+
     <tr>
       <td colSpan={cols} style={{ padding: '0.8rem' }}>
         <div className="skeleton" style={{ height: '2.5rem', width: '100%' }}></div>
@@ -480,6 +529,14 @@ export default function Admin() {
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
                 <thead>
                   <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                    <th style={{ padding: '0.5rem 1rem', width: '40px' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={filteredAndSortedOrders.length > 0 && filteredAndSortedOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).every(o => selectedOrders.has(`${o.Timestamp}-${o.CustomerToken}-${o.ProductID}`))}
+                        onChange={() => handleToggleAllOrders(filteredAndSortedOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage))}
+                        style={{ cursor: 'pointer', width: '18px', height: '18px' }}
+                      />
+                    </th>
                     <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => requestSort('Timestamp')}>日期 {sortConfig.key === 'Timestamp' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</th>
                     <th style={{ padding: '1rem' }}>客戶</th>
                     <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => requestSort('ProductID')}>商品 {sortConfig.key === 'ProductID' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</th>
@@ -493,8 +550,16 @@ export default function Admin() {
                   {loading && orders.length === 0 ? (
                     [...Array(5)].map((_, i) => <SkeletonRow key={i} />)
                   ) : (
-                    filteredAndSortedOrders.map((order, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    filteredAndSortedOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((order, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: selectedOrders.has(`${order.Timestamp}-${order.CustomerToken}-${order.ProductID}`) ? 'rgba(88,166,255,0.1)' : '' }}>
+                        <td style={{ padding: '1rem' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={selectedOrders.has(`${order.Timestamp}-${order.CustomerToken}-${order.ProductID}`)}
+                            onChange={() => handleToggleOrderSelection(order)}
+                            style={{ cursor: 'pointer', width: '18px', height: '18px' }}
+                          />
+                        </td>
                         <td style={{ padding: '1rem' }}>{new Date(order.Timestamp).toLocaleDateString()}</td>
                         <td style={{ padding: '1rem' }}>
                           <div style={{ fontWeight: '500', color: 'var(--primary-color)' }}>{getCustomerName(order.CustomerToken)}</div>
@@ -513,6 +578,8 @@ export default function Admin() {
                         </td>
                          <td style={{ padding: '1rem' }}>
                             <div style={{ display: 'flex', gap: '0.4rem' }}>
+                              
+                              <button title="已出貨" onClick={() => updateOrderStatus(order, '已出貨')} style={{ background: 'transparent', border: 'none', color: '#38b2ac', cursor: 'pointer' }}><Truck size={18} /></button>
                               <button title="核准" onClick={() => updateOrderStatus(order, '已核准')} style={{ background: 'transparent', border: 'none', color: 'var(--success-color)', cursor: 'pointer' }}><CheckCircle size={18} /></button>
                               <button 
                                 title="編輯訂單" 
