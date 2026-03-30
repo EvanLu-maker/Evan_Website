@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
-import { LogOut, Package, Loader2, Plus, Minus, CheckCircle, User, FileText, ShieldAlert } from 'lucide-react';
+import { LogOut, Package, Loader2, Plus, Minus, CheckCircle, User, FileText, ShieldAlert, RefreshCw } from 'lucide-react';
 
 export default function Shop() {
   const navigate = useNavigate();
@@ -11,9 +11,20 @@ export default function Shop() {
   const [error, setError] = useState('');
   
   // 訂購單列: { id (unique), productId, qty, shipDate }
-  const [rows, setRows] = useState([]);
+  const [rows, setRows] = useState([{ id: Date.now(), productId: '', qty: '', shipDate: '' }]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
+  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
+
+  // 優化：產品索引表 (Lookup Map)
+  const productsMap = React.useMemo(() => {
+    const map = {};
+    products.forEach(p => {
+      const name = p.Name || p.品名 || p.商品名稱 || p.Product || p.Item || Object.values(p).find(v => typeof v === 'string' && isNaN(Number(v)));
+      if (name) map[name] = p;
+    });
+    return map;
+  }, [products]);
 
   useEffect(() => {
     const userData = sessionStorage.getItem('user');
@@ -23,23 +34,35 @@ export default function Shop() {
     }
     const parsedUser = JSON.parse(userData);
     setUser(parsedUser);
+
+    // 優先讀取快取，實現「瞬開」
+    const cached = localStorage.getItem('cached_products');
+    if (cached) {
+      setProducts(JSON.parse(cached));
+      setLoading(false);
+    }
+    
     fetchProducts(parsedUser.token);
   }, [navigate]);
 
   const fetchProducts = async (token) => {
-    setLoading(true);
+    const hasCache = !!localStorage.getItem('cached_products');
+    if (!hasCache) setLoading(true);
+    else setIsBackgroundSyncing(true);
+    
     setError('');
     try {
       const res = await api.getProducts(token);
-      setProducts(res.data || []);
-      if ((res.data || []).length > 0) {
-        // 初始化第一個空列
-        setRows([{ id: Date.now(), productId: '', qty: '', shipDate: '' }]);
-      }
+      const data = res.data || [];
+      setProducts(data);
+      localStorage.setItem('cached_products', JSON.stringify(data));
     } catch (err) {
-      setError(err.message || '無法載入商品清單，請確認試算表設定，或白名單中沒有授權商品。');
+      if (!hasCache) {
+        setError(err.message || '無法載入商品清單，請確認試算表設定。');
+      }
     } finally {
       setLoading(false);
+      setIsBackgroundSyncing(false);
     }
   };
 
@@ -49,12 +72,8 @@ export default function Shop() {
   };
 
   const getProductInfo = (pid) => {
-    if (!pid) return null;
-    const p = products.find(x => {
-        const xName = x.Name || x.品名 || x.商品名稱 || x.Product || x.Item || Object.values(x).find(v => typeof v === 'string' && isNaN(Number(v)));
-        return xName === pid;
-    });
-    if (!p) return null;
+    if (!pid || !productsMap[pid]) return null;
+    const p = productsMap[pid];
     
     // Normalizing keys
     const name = p.Name || p.品名 || p.商品名稱 || p.Product || p.Item || Object.values(p).find(v => typeof v === 'string' && isNaN(Number(v)));
@@ -167,10 +186,15 @@ export default function Shop() {
     }
   };
 
+  // 骨架屏元件
+  const SkeletonInput = () => <div className="skeleton" style={{ height: '2.5rem', width: '100%', borderRadius: '8px' }}></div>;
+
   if (loading) {
+    // 雖然有快取後很少出現，但第一次載入時顯示大外殼骨架
     return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Loader2 className="animate-spin text-primary" size={48} color="var(--primary-color)" />
+      <div style={{ padding: '2rem 1rem', maxWidth: '1000px', margin: '0 auto' }}>
+          <div className="glass-panel" style={{ height: '4rem', marginBottom: '1.5rem' }}><SkeletonInput /></div>
+          <div className="glass-panel" style={{ height: '20rem' }}><SkeletonInput /></div>
       </div>
     );
   }
@@ -185,9 +209,17 @@ export default function Shop() {
             <Package color="var(--primary-color)" />
             <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '1.2rem' }}>採購大廳</h2>
           </div>
-          <button onClick={handleLogout} className="btn btn-outline" style={{ width: 'auto', padding: '0.4rem 0.8rem', color: 'var(--danger-color)', borderColor: 'rgba(248, 81, 73, 0.3)' }}>
-            <LogOut size={16} /> 登出
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {isBackgroundSyncing && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary-color)', fontSize: '0.8rem' }}>
+                <RefreshCw size={14} className="animate-spin" />
+                <span className="mobile-hidden">資料同步中...</span>
+              </div>
+            )}
+            <button onClick={handleLogout} className="btn btn-outline" style={{ width: 'auto', padding: '0.4rem 0.8rem', color: 'var(--danger-color)', borderColor: 'rgba(248, 81, 73, 0.3)' }}>
+              <LogOut size={16} /> 登出
+            </button>
+          </div>
         </div>
         
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>

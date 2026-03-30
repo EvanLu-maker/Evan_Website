@@ -280,19 +280,32 @@ function handleResetPasswordWithCode(account, code, newPassword) {
   return {status: 'error', message: '帳號資訊不符'};
 }
 
-function getAccountByToken(token) {
-  if (token === "ADMIN") return "ADMIN";
-  const sheet = getSheet("customers");
-  if (!sheet) return null;
+  return null;
+}
 
-  const data = sheet.getDataRange().getValues();
-  const colA = getColIdx(sheet, ["帳號", "Account", "Username", "Login"]);
-  const colT = getColIdx(sheet, ["Token", "代碼"]);
+/**
+ * 核心優化：一次性取得帳號資訊、管理員權限、以及商品清單字串 (減少試算表讀取次數)
+ */
+function getUserSessionInfo(token) {
+  if (token === "ADMIN") return { account: "ADMIN", isAdmin: true, allowedList: "" };
   
-  if (colT === -1 || colA === -1) return null;
+  const sheet = getSheet("customers");
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  
+  const colA = getColIdx(sheet, ["Account", "帳號"]);
+  const colT = getColIdx(sheet, ["Token", "代碼"]);
+  const colIsAdmin = getColIdx(sheet, ["IsAdmin", "管理員"]);
+  const colList = getColIdx(sheet, ["可購產品", "AllowedProducts", "Products"]);
 
-  for(let i=1; i<data.length; i++) {
-    if(String(data[i][colT]) === String(token)) return data[i][colA];
+  for(let i = 1; i < data.length; i++) {
+    if(String(data[i][colT]) === String(token)) {
+      return {
+        account: String(data[i][colA]),
+        isAdmin: (data[i][colIsAdmin] == "1" || data[i][colIsAdmin] === true || String(data[i][colIsAdmin]).toUpperCase() === "TRUE"),
+        allowedList: colList > -1 ? String(data[i][colList]) : ""
+      };
+    }
   }
   return null;
 }
@@ -317,15 +330,20 @@ function isAdminToken(token) {
 }
 
 function getProducts(customerToken) {
-  const account = getAccountByToken(customerToken);
-  if (!account) return {status: 'error', message: '無效的 Token'};
+  const session = getUserSessionInfo(customerToken);
+  if (!session) return {status: 'error', message: '無效的 Token'};
 
-  const isAdmin = isAdminToken(customerToken);
+  const { account, isAdmin, allowedList } = session;
   let allowedSet = new Set();
   
-  // 如果不是管理員，則需要檢查白名單
   if (!isAdmin) {
-    // 來源 1: Whitelist 工作表
+    // 來源 1: customers 試算表 (已經在 Session 裡拿到字串，速度秒開)
+    if (allowedList) {
+      allowedList.split(/[,;\n\r]+/).map(s => s.trim().toLowerCase()).filter(s => s.length > 0)
+        .forEach(it => allowedSet.add(it));
+    }
+
+    // 來源 2: Whitelist 試算表 (額外白名單)
     const wSheet = getSheet("Whitelist");
     if (wSheet) {
       const wData = wSheet.getDataRange().getValues();
@@ -333,26 +351,8 @@ function getProducts(customerToken) {
       const wColP = getColIdx(wSheet, ["ProductName", "品名", "商品名稱"]);
       if (wColA > -1 && wColP > -1) {
         for(let i=1; i<wData.length; i++) {
-          if(String(wData[i][wColA]).toLowerCase().trim() === String(account).toLowerCase().trim()) {
+          if(String(wData[i][wColA]).toLowerCase().trim() === account.toLowerCase().trim()) {
             allowedSet.add(String(wData[i][wColP]).toLowerCase().trim());
-          }
-        }
-      }
-    }
-
-    // 來源 2: customers 工作表中的「可購產品」欄位
-    const cSheet = getSheet("customers");
-    if (cSheet) {
-      const cData = cSheet.getDataRange().getValues();
-      const cColA = getColIdx(cSheet, ["帳號", "Account", "Username"]);
-      const cColList = getColIdx(cSheet, ["可購產品", "AllowedProducts", "Products"]);
-      if (cColA > -1 && cColList > -1) {
-        for(let i=1; i<cData.length; i++) {
-          if(String(cData[i][cColA]).toLowerCase().trim() === String(account).toLowerCase().trim()) {
-            const rawList = String(cData[i][cColList]);
-            // 支援逗號、分號、換行分隔
-            const items = rawList.split(/[,;\n\r]+/).map(s => s.trim().toLowerCase()).filter(s => s.length > 0);
-            items.forEach(it => allowedSet.add(it));
           }
         }
       }
