@@ -41,7 +41,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_API_BASE_URL: https://script.google.com/macros/s/AKfycbxiAQJIAwafEr-46UBfLPnKiPamsxYWQRBSTrQLrW6Yuuv_ACYZeaLYDdbi3SLQS9s/exec
+          VITE_API_BASE_URL: https://script.google.com/macros/s/AKfycbyqTD9Rwr7ytbWks6pp-aahoZhjV1KY68DLGXSeYD79VOP0zq4lPjyAH4KR35MGcsA/exec
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
