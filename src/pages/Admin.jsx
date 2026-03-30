@@ -1,3 +1,8 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../services/api';
+import { Package, Loader2, CheckCircle, XCircle, Clock, Save, RefreshCw, Trash2, Users, ShieldAlert, Plus, Edit, Key, Truck } from 'lucide-react';
+
 export default function Admin() {
   const navigate = useNavigate();
   
@@ -10,7 +15,12 @@ export default function Admin() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState('orders');
   const [error, setError] = useState('');
-    
+  
+  const [adminToken, setAdminToken] = useState('ADMIN');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedOrders, setSelectedOrders] = useState(new Set());
+  const itemsPerPage = 10;
+  
   // -- UI States --
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
@@ -44,19 +54,11 @@ export default function Admin() {
     }
     setSortConfig({ key, direction });
   };
-  useEffect(() => { setCurrentPage(1); setSelectedOrders(new Set()); }, [searchTerm, showOnlyPending]);
-
-  const [showOnlyPending, setShowOnlyPending] = useState(false);
-  const [sortConfig, setSortConfig] = useState({ key: 'TargetShipDate', direction: 'asc' });
 
   useEffect(() => { 
     setCurrentPage(1); 
     setSelectedOrders(new Set()); 
   }, [searchTerm, showOnlyPending]);
-  
-  // 客戶清單專用搜尋與排序
-  const [searchTermCustomer, setSearchTermCustomer] = useState('');
-  const [sortConfigCustomer, setSortConfigCustomer] = useState({ key: 'Account', direction: 'asc' });
 
   useEffect(() => {
     // 優先讀取本地快取，實現「秒開」
