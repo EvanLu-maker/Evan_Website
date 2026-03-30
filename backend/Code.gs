@@ -9,10 +9,10 @@ function initializeDatabase() {
   
   // customers
   let cS = getSheet("customers") || ss.insertSheet("customers");
-  if(cS.getLastRow() < 1) cS.getRange(1, 1, 1, 9).setValues([["Account", "Password", "Token", "IsAdmin", "Email", "Phone", "IsBlocked", "FailedAttempts", "Salt"]]);
+  if(cS.getLastRow() < 1) cS.getRange(1, 1, 1, 11).setValues([["Account", "Password", "Token", "IsAdmin", "Email", "Phone", "IsBlocked", "FailedAttempts", "Salt", "ResetCode", "ResetExpiry"]]);
   if(cS.getLastRow() < 2) {
       const salt = Utilities.getUuid();
-      cS.appendRow(["evan", hashPassword("1234", salt), "T-001", "1", "evan@example.com", "0912-345-678", 0, 0, salt]);
+      cS.appendRow(["evan", hashPassword("1234", salt), "T-001", "1", "evan@example.com", "0912-345-678", 0, 0, salt, "", ""]);
   }
   
   // Products
@@ -84,6 +84,8 @@ function doPost(e) {
       case 'addCustomer': return res(addCustomer(b.customerToken, b.customerData));
       case 'addProduct': return res(addProduct(b.customerToken, b.productData));
       case 'getAdminDashboardData': return res(getAdminDashboardData(b.customerToken));
+      case 'requestPasswordReset': return res(handleRequestPasswordReset(b.accountOrEmail));
+      case 'resetPasswordWithCode': return res(handleResetPasswordWithCode(b.account, b.code, b.newPassword));
       default: return res({status: 'error', message: '未知 Action'});
     }
   } catch(err) { return res({status: 'error', message: err.toString()}); }
@@ -185,6 +187,95 @@ function handleLogin(account, password, turnstileToken) {
   
   logLogin(account || "未知", "失敗", "帳號不存在");
   return {status: 'error', message: '帳號或密碼不正確'};
+}
+
+/**
+ * 送出重設請求：發送 6 位數代碼到 Email
+ */
+function handleRequestPasswordReset(accountOrEmail) {
+  if (!accountOrEmail) return {status: 'error', message: '請提供帳號或 Email'};
+
+  const sheet = getSheet("customers");
+  const data = sheet.getDataRange().getValues();
+  const colA = getColIdx(sheet, ["Account", "帳號"]);
+  const colEmail = getColIdx(sheet, ["Email", "電子郵件"]);
+  const colResetCode = getColIdx(sheet, ["ResetCode"]);
+  const colResetExpiry = getColIdx(sheet, ["ResetExpiry"]);
+
+  // 如果欄位不存在，自動新增
+  if (colResetCode === -1 || colResetExpiry === -1) {
+    const headers = data[0];
+    sheet.getRange(1, headers.length + 1).setValue("ResetCode");
+    sheet.getRange(1, headers.length + 2).setValue("ResetExpiry");
+    return handleRequestPasswordReset(accountOrEmail); // 遞迴重跑
+  }
+
+  for (let i = 1; i < data.length; i++) {
+    const acc = String(data[i][colA]).toLowerCase();
+    const email = String(data[i][colEmail]).toLowerCase();
+    
+    if (acc === accountOrEmail.toLowerCase() || email === accountOrEmail.toLowerCase()) {
+      if (!data[i][colEmail]) return {status: 'error', message: '該帳號未綁定 Email，請聯絡管理員'};
+
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiry = new Date(new Date().getTime() + 30 * 60000); // 30 mins
+
+      sheet.getRange(i + 1, colResetCode + 1).setValue(code);
+      sheet.getRange(i + 1, colResetExpiry + 1).setValue(expiry);
+
+      // 發送郵件
+      try {
+        GmailApp.sendEmail(data[i][colEmail], "【B2B 訂貨系統】密碼重設驗證碼", 
+          `您的驗證碼為：${code}\n\n請在 30 分鐘內於網頁輸入此代碼以完成密碼重設。`);
+      } catch(e) {
+        return {status: 'error', message: '發送郵件失敗，請稍後再試'};
+      }
+
+      return {status: 'success', message: '驗證碼已發送到您的信箱'};
+    }
+  }
+
+  return {status: 'error', message: '找不到相關帳號資訊'};
+}
+
+/**
+ * 驗證代碼並更換新密碼
+ */
+function handleResetPasswordWithCode(account, code, newPassword) {
+  if (!account || !code || !newPassword) return {status: 'error', message: '請填寫完整資訊'};
+
+  const sheet = getSheet("customers");
+  const data = sheet.getDataRange().getValues();
+  const colA = getColIdx(sheet, ["Account", "帳號"]);
+  const colP = getColIdx(sheet, ["Password", "密碼"]);
+  const colS = getColIdx(sheet, ["Salt"]);
+  const colResetCode = getColIdx(sheet, ["ResetCode"]);
+  const colResetExpiry = getColIdx(sheet, ["ResetExpiry"]);
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][colA]).toLowerCase() === account.toLowerCase()) {
+      const storedCode = String(data[i][colResetCode]);
+      const expiry = new Date(data[i][colResetExpiry]);
+
+      if (storedCode !== code) return {status: 'error', message: '驗證碼錯誤'};
+      if (new Date() > expiry) return {status: 'error', message: '驗證碼已過期'};
+
+      // 執行重設
+      const newSalt = Utilities.getUuid();
+      const hashedPass = hashPassword(newPassword, newSalt);
+      
+      sheet.getRange(i + 1, colP + 1).setValue(hashedPass);
+      if (colS > -1) sheet.getRange(i + 1, colS + 1).setValue(newSalt);
+      
+      // 清除驗證碼，防止重複使用
+      sheet.getRange(i + 1, colResetCode + 1).setValue("");
+      sheet.getRange(i + 1, colResetExpiry + 1).setValue("");
+
+      return {status: 'success', message: '密碼已成功重設！'};
+    }
+  }
+
+  return {status: 'error', message: '帳號資訊不符'};
 }
 
 function getAccountByToken(token) {

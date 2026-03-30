@@ -112,6 +112,12 @@ export default function Login() {
             '登入'
           )}
         </button>
+
+        <div style={{ marginTop: '1.5rem', fontSize: '0.875rem' }}>
+          <Link to="/forgot-password" style={{ color: 'var(--primary-color)', textDecoration: 'none' }}>
+            忘記密碼？
+          </Link>
+        </div>
       </form>
     </div>
   );
