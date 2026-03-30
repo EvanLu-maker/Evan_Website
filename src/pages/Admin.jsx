@@ -538,6 +538,60 @@ export default function Admin() {
                 </tbody>
               </table>
             </div>
+
+            {/* --- 分頁與批次操作列 --- */}
+            <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                顯示第 {filteredAndSortedOrders.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} 至 {Math.min(currentPage * itemsPerPage, filteredAndSortedOrders.length)} 筆，共 {filteredAndSortedOrders.length} 筆
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => { setCurrentPage(p => p - 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  className="btn btn-outline"
+                  style={{ padding: '0.4rem 0.8rem' }}
+                >
+                  上一頁
+                </button>
+                {[...Array(Math.ceil(filteredAndSortedOrders.length / itemsPerPage))].map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => { setCurrentPage(i + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    className={`btn ${currentPage === i + 1 ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ padding: '0.4rem 0.8rem', minWidth: '40px' }}
+                  >
+                    {i + 1}
+                  </button>
+                )).slice(Math.max(0, currentPage - 3), Math.min(Math.ceil(filteredAndSortedOrders.length / itemsPerPage), currentPage + 2))}
+                <button
+                  disabled={currentPage === Math.ceil(filteredAndSortedOrders.length / itemsPerPage) || filteredAndSortedOrders.length === 0}
+                  onClick={() => { setCurrentPage(p => p + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  className="btn btn-outline"
+                  style={{ padding: '0.4rem 0.8rem' }}
+                >
+                  下一頁
+                </button>
+              </div>
+            </div>
+
+            {selectedOrders.size > 0 && (
+              <div className="animate-fade-in" style={{
+                position: 'fixed', bottom: '2rem', left: '50%', transform: 'translateX(-50%)',
+                background: 'var(--primary-color)', color: '#fff', padding: '1rem 2rem',
+                borderRadius: '50px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+                display: 'flex', alignItems: 'center', gap: '1.5rem', zIndex: 1000,
+                border: '1px solid rgba(255,255,255,0.2)'
+              }}>
+                <div style={{ fontWeight: '600' }}>已選取 {selectedOrders.size} 筆訂單</div>
+                <div style={{ height: '20px', width: '1px', background: 'rgba(255,255,255,0.3)' }}></div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => handleBatchUpdateStatus('已核准')} className="btn" style={{ background: 'rgba(255,255,255,0.2)', padding: '0.4rem 1rem', fontSize: '0.85rem', color: '#fff' }}>核准</button>
+                  <button onClick={() => handleBatchUpdateStatus('已出貨')} className="btn" style={{ background: 'rgba(255,255,255,0.2)', padding: '0.4rem 1rem', fontSize: '0.85rem', color: '#fff' }}>已出貨</button>
+                  <button onClick={() => handleBatchUpdateStatus('已取消')} className="btn" style={{ background: 'rgba(248, 81, 73, 0.4)', padding: '0.4rem 1rem', fontSize: '0.85rem', color: '#fff' }}>取消</button>
+                </div>
+                <button onClick={() => setSelectedOrders(new Set())} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', opacity: 0.7 }}><XCircle size={18} /></button>
+              </div>
+            )}
           </div>
         )}
 
@@ -691,10 +745,11 @@ export default function Admin() {
                             <button 
                               onClick={() => {
                                 setEditingCustomer({
-                                  account: cust.Account,
-                                  companyName: cust.公司名稱 || cust.店名 || '',
-                                  email: cust.Email || '',
-                                  phone: cust.Phone || '',
+                                  account: cust.account,
+                                  companyName: cust.companyName,
+                                  email: cust.email || '',
+                                  phone: cust.phone || '',
+                                  address: cust.address || '',
                                   allowedProducts: (cust.可購產品 || '').split(',').filter(x => x)
                                 });
                                 setShowEditModal(true);
