@@ -84,6 +84,8 @@ function doPost(e) {
       case 'addCustomer': return res(addCustomer(b.customerToken, b.customerData));
       case 'addProduct': return res(addProduct(b.customerToken, b.productData));
       case 'getAdminDashboardData': return res(getAdminDashboardData(b.customerToken));
+      case 'updateCustomer': return res(handleUpdateCustomer(b.customerToken, b.customerData));
+      case 'resetCustomerPassword': return res(handleResetCustomerPassword(b.customerToken, b.targetAccount));
       case 'requestPasswordReset': return res(handleRequestPasswordReset(b.accountOrEmail));
       case 'resetPasswordWithCode': return res(handleResetPasswordWithCode(b.account, b.code, b.newPassword));
       default: return res({status: 'error', message: '未知 Action'});
@@ -599,6 +601,73 @@ function addProduct(adminToken, productData) {
   return {status: 'success', message: '新增商品成功！'};
 }
 
+/**
+ * 更新現有客戶資料
+ */
+function handleUpdateCustomer(adminToken, customerData) {
+  if (!isAdminToken(adminToken)) return {status: 'error', message: '權限不足'};
+
+  const sheet = getSheet("customers");
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  
+  const colA = getColIdx(sheet, ["Account", "帳號"]);
+  if (colA === -1) return {status: 'error', message: '遺失帳號欄位，無法更新'};
+
+  for(let i = 1; i < data.length; i++) {
+    if(String(data[i][colA]).trim().toLowerCase() === String(customerData.account).trim().toLowerCase()) {
+      
+      const fields = {
+        "公司名稱": customerData.companyName,
+        "店名": customerData.companyName,
+        "可購產品": customerData.allowedProducts, // 逗號分隔
+        "AllowedProducts": customerData.allowedProducts,
+        "Email": customerData.email,
+        "電子郵件": customerData.email,
+        "Phone": customerData.phone,
+        "電話": customerData.phone
+      };
+
+      // 遍歷所有欄位，如果匹配則更新
+      for (let j = 0; j < headers.length; j++) {
+        const h = String(headers[j]).trim();
+        if (fields[h] !== undefined) {
+          sheet.getRange(i + 1, j + 1).setValue(fields[h]);
+        }
+      }
+      return {status: 'success', message: '客戶資料更新成功！'};
+    }
+  }
+  return {status: 'error', message: '找不到該帳號'};
+}
+
+/**
+ * 管理員強制重設客戶密碼
+ */
+function handleResetCustomerPassword(adminToken, targetAccount) {
+  if (!isAdminToken(adminToken)) return {status: 'error', message: '權限不足'};
+
+  const sheet = getSheet("customers");
+  const data = sheet.getDataRange().getValues();
+  const colA = getColIdx(sheet, ["Account", "帳號"]);
+  const colP = getColIdx(sheet, ["Password", "密碼"]);
+  const colS = getColIdx(sheet, ["Salt"]);
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][colA]).trim().toLowerCase() === String(targetAccount).trim().toLowerCase()) {
+      const newPassword = generateRandomPassword();
+      const newSalt = Utilities.getUuid();
+      const hashedPass = hashPassword(newPassword, newSalt);
+
+      sheet.getRange(i + 1, colP + 1).setValue(hashedPass);
+      if (colS > -1) sheet.getRange(i + 1, colS + 1).setValue(newSalt);
+
+      return {status: 'success', message: '密碼已重設！', newPassword: newPassword};
+    }
+  }
+  return {status: 'error', message: '找不到帳號'};
+}
+
 function generateRandomPassword() {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"; // 排除易混淆字元
   let pass = "";
@@ -704,4 +773,71 @@ function migratePlainPasswordsToHashes() {
     }
   }
   return "遷移完成！";
+}
+
+/**
+ * 更新現有客戶資料
+ */
+function handleUpdateCustomer(adminToken, customerData) {
+  if (!isAdminToken(adminToken)) return {status: 'error', message: '權限不足'};
+
+  const sheet = getSheet("customers");
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  
+  const colA = getColIdx(sheet, ["Account", "帳號"]);
+  if (colA === -1) return {status: 'error', message: '遺失帳號欄位，無法更新'};
+
+  for(let i = 1; i < data.length; i++) {
+    if(String(data[i][colA]).trim().toLowerCase() === String(customerData.account).trim().toLowerCase()) {
+      
+      const fields = {
+        "公司名稱": customerData.companyName,
+        "店名": customerData.companyName,
+        "可購產品": customerData.allowedProducts, // 逗號分隔
+        "AllowedProducts": customerData.allowedProducts,
+        "Email": customerData.email,
+        "電子郵件": customerData.email,
+        "Phone": customerData.phone,
+        "電話": customerData.phone
+      };
+
+      // 遍歷所有欄位，如果匹配則更新
+      for (let j = 0; j < headers.length; j++) {
+        const h = String(headers[j]).trim();
+        if (fields[h] !== undefined) {
+          sheet.getRange(i + 1, j + 1).setValue(fields[h]);
+        }
+      }
+      return {status: 'success', message: '客戶資料更新成功！'};
+    }
+  }
+  return {status: 'error', message: '找不到該帳號'};
+}
+
+/**
+ * 管理員強制重設客戶密碼
+ */
+function handleResetCustomerPassword(adminToken, targetAccount) {
+  if (!isAdminToken(adminToken)) return {status: 'error', message: '權限不足'};
+
+  const sheet = getSheet("customers");
+  const data = sheet.getDataRange().getValues();
+  const colA = getColIdx(sheet, ["Account", "帳號"]);
+  const colP = getColIdx(sheet, ["Password", "密碼"]);
+  const colS = getColIdx(sheet, ["Salt"]);
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][colA]).trim().toLowerCase() === String(targetAccount).trim().toLowerCase()) {
+      const newPassword = generateRandomPassword();
+      const newSalt = Utilities.getUuid();
+      const hashedPass = hashPassword(newPassword, newSalt);
+
+      sheet.getRange(i + 1, colP + 1).setValue(hashedPass);
+      if (colS > -1) sheet.getRange(i + 1, colS + 1).setValue(newSalt);
+
+      return {status: 'success', message: '密碼已重設！', newPassword: newPassword};
+    }
+  }
+  return {status: 'error', message: '找不到帳號'};
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { Package, Loader2, CheckCircle, XCircle, Clock, Save, RefreshCw, Trash2, Users, ShieldAlert, Plus } from 'lucide-react';
+import { Package, Loader2, CheckCircle, XCircle, Clock, Save, RefreshCw, Trash2, Users, ShieldAlert, Plus, Edit, Key } from 'lucide-react';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -23,6 +23,8 @@ export default function Admin() {
   const [resultPassword, setResultPassword] = useState('');
   
   const [newCustomer, setNewCustomer] = useState({ account: '', companyName: '', allowedProducts: [] });
+  const [editingCustomer, setEditingCustomer] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [newProduct, setNewProduct] = useState({ name: '', minQty: 0, maxQty: 0, unit: '包', leadTime: 1 });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -301,16 +303,65 @@ export default function Admin() {
     }
   };
 
-  const toggleProductSelection = (pName) => {
-    console.log('Toggling product:', pName);
-    setNewCustomer(prev => {
-      const current = prev.allowedProducts || [];
-      if (current.includes(pName)) {
-        return { ...prev, allowedProducts: current.filter(x => x !== pName) };
-      } else {
-        return { ...prev, allowedProducts: [...current, pName] };
-      }
-    });
+  const handleUpdateCustomer = async (e) => {
+    e.preventDefault();
+    if (!editingCustomer.companyName) return alert('請填寫店名');
+    
+    setIsSubmitting(true);
+    try {
+      const customerData = {
+        ...editingCustomer,
+        allowedProducts: editingCustomer.allowedProducts.join(',')
+      };
+      await api.updateCustomer(adminToken, customerData);
+      alert('客戶資料更新成功！');
+      fetchData(adminToken);
+      setShowEditModal(false);
+    } catch (err) {
+      alert('更新失敗：' + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResetPassword = async (account) => {
+    if (!window.confirm(`確定要重設 ${account} 的密碼嗎？這會產生一組隨機新密碼。`)) return;
+    
+    setIsSubmitting(true);
+    try {
+      const res = await api.resetCustomerPassword(adminToken, account);
+      setResultPassword(res.newPassword);
+      // 自動切換到顯示密碼的畫面（借用 showCustomerModal 的結果顯示區塊）
+      setShowCustomerModal(true); 
+      alert('密碼重設成功！請複製新密碼。');
+    } catch (err) {
+      alert('重設失敗：' + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const toggleProductSelection = (pName, isEdit = false) => {
+    console.log('Toggling product:', pName, 'isEdit:', isEdit);
+    if (isEdit) {
+      setEditingCustomer(prev => {
+        const current = prev.allowedProducts || [];
+        if (current.includes(pName)) {
+          return { ...prev, allowedProducts: current.filter(x => x !== pName) };
+        } else {
+          return { ...prev, allowedProducts: [...current, pName] };
+        }
+      });
+    } else {
+      setNewCustomer(prev => {
+        const current = prev.allowedProducts || [];
+        if (current.includes(pName)) {
+          return { ...prev, allowedProducts: current.filter(x => x !== pName) };
+        } else {
+          return { ...prev, allowedProducts: [...current, pName] };
+        }
+      });
+    }
   };
 
   const SkeletonRow = ({ cols = 7 }) => (
@@ -549,13 +600,40 @@ export default function Admin() {
                           )}
                         </td>
                         <td style={{ padding: '1rem' }}>
-                          <button 
-                            onClick={() => handleToggleBlock(cust.Account, cust.IsBlocked)}
-                            className={`btn ${isBlocked ? 'btn-primary' : 'btn-outline'}`}
-                            style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', minWidth: '80px', borderColor: isBlocked ? '' : 'var(--danger-color)', color: isBlocked ? '' : 'var(--danger-color)' }}
-                          >
-                            {isBlocked ? '🔓 解鎖' : '⛔ 封鎖'}
-                          </button>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button 
+                              onClick={() => {
+                                setEditingCustomer({
+                                  account: cust.Account,
+                                  companyName: cust.公司名稱 || cust.店名 || '',
+                                  email: cust.Email || '',
+                                  phone: cust.Phone || '',
+                                  allowedProducts: (cust.可購產品 || '').split(',').filter(x => x)
+                                });
+                                setShowEditModal(true);
+                              }}
+                              className="btn btn-outline"
+                              style={{ padding: '0.3rem', minWidth: 'auto' }}
+                              title="編輯資料"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button 
+                              onClick={() => handleResetPassword(cust.Account)}
+                              className="btn btn-outline"
+                              style={{ padding: '0.3rem', minWidth: 'auto', color: '#f59e0b', borderColor: '#f59e0b' }}
+                              title="重設密碼"
+                            >
+                              <Key size={16} />
+                            </button>
+                            <button 
+                              onClick={() => handleToggleBlock(cust.Account, cust.IsBlocked)}
+                              className={`btn ${isBlocked ? 'btn-primary' : 'btn-outline'}`}
+                              style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', minWidth: '80px', borderColor: isBlocked ? '' : 'var(--danger-color)', color: isBlocked ? '' : 'var(--danger-color)' }}
+                            >
+                              {isBlocked ? '🔓 解鎖' : '⛔ 封鎖'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -685,6 +763,65 @@ export default function Admin() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* --- 編輯客戶彈窗 --- */}
+      {showEditModal && editingCustomer && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: '2rem' }}>
+          <div className="glass-panel animate-fade-in" style={{ maxWidth: '600px', width: '100%', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--primary-color)' }}>
+            <h3 style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.5rem' }}>✏️ 編輯客戶資料</h3>
+            <form onSubmit={handleUpdateCustomer}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div className="form-group">
+                  <label className="form-label">登入帳號 (不可修改)</label>
+                  <input type="text" className="form-input" value={editingCustomer.account} disabled style={{ opacity: 0.6 }} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">店名 / 公司名稱</label>
+                  <input type="text" className="form-input" required value={editingCustomer.companyName} onChange={e => setEditingCustomer({...editingCustomer, companyName: e.target.value})} />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
+                <div className="form-group">
+                  <label className="form-label">電子郵件</label>
+                  <input type="email" className="form-input" value={editingCustomer.email || ''} onChange={e => setEditingCustomer({...editingCustomer, email: e.target.value})} placeholder="example@mail.com" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">聯絡電話</label>
+                  <input type="text" className="form-input" value={editingCustomer.phone || ''} onChange={e => setEditingCustomer({...editingCustomer, phone: e.target.value})} placeholder="0912-345-678" />
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginTop: '1rem' }}>
+                <label className="form-label">授權可購商品</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                  {products.map((p, pIdx) => {
+                    const pName = p.Name || p.品名 || p.商品名稱 || p.Product || p.Item || Object.values(p).find(v => typeof v === 'string' && isNaN(Number(v)));
+                    if (!pName) return null;
+                    return (
+                      <label key={pIdx} style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', cursor: 'pointer', fontSize: '0.9rem', padding: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }}>
+                         <input 
+                           type="checkbox" 
+                           checked={editingCustomer.allowedProducts.includes(pName)} 
+                           onChange={() => toggleProductSelection(pName, true)} 
+                         />
+                         <span>{pName}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+                <button type="button" onClick={() => setShowEditModal(false)} className="btn btn-outline" style={{ flex: 1 }}>取消</button>
+                <button type="submit" disabled={isSubmitting} className="btn btn-primary" style={{ flex: 2 }}>
+                  {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : '儲存變更'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

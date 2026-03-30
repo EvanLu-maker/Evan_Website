@@ -61,6 +61,12 @@ export const api = {
     
   getAdminDashboardData: (customerToken) =>
     apiCall('getAdminDashboardData', { customerToken }),
+
+  updateCustomer: (customerToken, customerData) =>
+    apiCall('updateCustomer', { customerToken, customerData }),
+
+  resetCustomerPassword: (customerToken, targetAccount) =>
+    apiCall('resetCustomerPassword', { customerToken, targetAccount }),
     
   requestPasswordReset: (accountOrEmail) =>
     apiCall('requestPasswordReset', { accountOrEmail }),
