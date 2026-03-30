@@ -116,6 +116,13 @@ h1, h2, h3, h4, h5, h6 {
   transition: all 0.2s;
 }
 
+.form-input:disabled {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
 .form-input:focus {
   outline: none;
   border-color: var(--primary-color);

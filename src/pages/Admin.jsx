@@ -579,26 +579,27 @@ export default function Admin() {
                         <Edit size={14} />
                       </button>
                     </div>
-                    <div className="form-group">
-                      <label className="form-label">品名</label>
-                      <input type="text" className="form-input" defaultValue={pName} disabled style={{ opacity: 0.7 }} />
+                    <div style={{ marginBottom: '1rem' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.2rem' }}>品名</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--primary-color)' }}>{pName}</div>
                     </div>
-                    <div className="mobile-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.8rem' }}>
-                      <div className="form-group">
-                        <label className="form-label">出貨時間</label>
-                        <input type="number" className="form-input" defaultValue={p.出貨時間 || p.LeadTime || p.備貨天數 || p.提前天數 || p.準備天數 || 1} disabled style={{ opacity: 0.7 }} />
+                    
+                    <div className="mobile-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', background: 'rgba(255,255,255,0.03)', padding: '0.8rem', borderRadius: '8px' }}>
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>預定出貨</div>
+                        <div style={{ fontWeight: '500' }}>{p.出貨時間 || p.LeadTime || p.備貨天數 || 1} 天</div>
                       </div>
-                      <div className="form-group">
-                        <label className="form-label">最小訂購</label>
-                        <input type="number" className="form-input" defaultValue={p.最小訂購量 || p.MinQty || p.起訂量 || p.最小量 || 0} disabled style={{ opacity: 0.7 }} />
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>單位</div>
+                        <div style={{ fontWeight: '500' }}>{p.單位 || p.Unit || '包'}</div>
                       </div>
-                      <div className="form-group">
-                        <label className="form-label">最大訂購</label>
-                        <input type="number" className="form-input" defaultValue={p.最大訂購量 || p.MaxQty || p.最大量 || 0} disabled style={{ opacity: 0.7 }} />
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>最小訂購</div>
+                        <div style={{ fontWeight: '500' }}>{p.最小訂購量 || p.MinQty || p.起訂量 || 0}</div>
                       </div>
-                      <div className="form-group">
-                        <label className="form-label">單位</label>
-                        <input type="text" className="form-input" defaultValue={p.單位 || p.Unit || '包'} disabled style={{ opacity: 0.7 }} />
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>最大訂購</div>
+                        <div style={{ fontWeight: '500' }}>{p.最大訂購量 || p.MaxQty || p.最大量 || '無限制'}</div>
                       </div>
                     </div>
                  </div>
