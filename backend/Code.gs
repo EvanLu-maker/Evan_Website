@@ -86,6 +86,8 @@ function doPost(e) {
       case 'updateProduct': return res(handleUpdateProduct(b.customerToken, b.productData));
       case 'getAdminDashboardData': return res(getAdminDashboardData(b.customerToken));
       case 'updateCustomer': return res(handleUpdateCustomer(b.customerToken, b.customerData));
+      case 'updateOrderStatus': return res(handleUpdateOrderStatus(b.customerToken, b.orderData, b.newStatus));
+      case 'updateOrder': return res(handleUpdateOrder(b.customerToken, b.orderData, b.updatedOrder));
       case 'resetCustomerPassword': return res(handleResetCustomerPassword(b.customerToken, b.targetAccount));
       case 'requestPasswordReset': return res(handleRequestPasswordReset(b.accountOrEmail));
       case 'resetPasswordWithCode': return res(handleResetPasswordWithCode(b.account, b.code, b.newPassword));

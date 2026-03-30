@@ -25,8 +25,10 @@ export default function Admin() {
   const [newCustomer, setNewCustomer] = useState({ account: '', companyName: '', allowedProducts: [] });
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [editingOrder, setEditingOrder] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showEditProductModal, setShowEditProductModal] = useState(false);
+  const [showEditOrderModal, setShowEditOrderModal] = useState(false);
   const [newProduct, setNewProduct] = useState({ name: '', minQty: 0, maxQty: 0, unit: '包', leadTime: 1 });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -248,9 +250,36 @@ export default function Admin() {
     return result;
   }, [processedCustomers, searchTermCustomer, sortConfigCustomer]);
 
-  const updateOrderStatus = async (rowIdx, newStatus) => {
-    // 雖然前端先反應，但實際同步應呼叫 API (此處僅為 Demo 簡化)
-    setOrders(prev => prev.map((o, i) => i === rowIdx ? { ...o, Status: newStatus } : o));
+  const updateOrderStatus = async (order, newStatus) => {
+    if (!window.confirm(`確定要將狀態改為「${newStatus}」嗎？`)) return;
+    setIsSyncing(true);
+    try {
+      await api.updateOrderStatus(adminToken, order, newStatus);
+      alert('狀態更新成功');
+      fetchData(adminToken);
+    } catch (err) {
+      alert('更新失敗：' + err.message);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleUpdateOrder = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      await api.updateOrder(adminToken, editingOrder, {
+        qty: editingOrder.Quantity,
+        shipDate: editingOrder.TargetShipDate
+      });
+      alert('訂單修改成功');
+      fetchData(adminToken);
+      setShowEditOrderModal(false);
+    } catch (err) {
+      alert('修改失敗：' + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleToggleBlock = async (account, isBlockedString) => {
@@ -482,12 +511,22 @@ export default function Admin() {
                              {order.Status}
                            </span>
                         </td>
-                        <td style={{ padding: '1rem' }}>
-                           <div style={{ display: 'flex', gap: '0.5rem' }}>
-                             <button title="核准" onClick={() => updateOrderStatus(idx, '已核准')} style={{ background: 'transparent', border: 'none', color: 'var(--success-color)', cursor: 'pointer' }}><CheckCircle size={18} /></button>
-                             <button title="取消" onClick={() => updateOrderStatus(idx, '已取消')} style={{ background: 'transparent', border: 'none', color: 'var(--danger-color)', cursor: 'pointer' }}><XCircle size={18} /></button>
-                           </div>
-                        </td>
+                         <td style={{ padding: '1rem' }}>
+                            <div style={{ display: 'flex', gap: '0.4rem' }}>
+                              <button title="核准" onClick={() => updateOrderStatus(order, '已核准')} style={{ background: 'transparent', border: 'none', color: 'var(--success-color)', cursor: 'pointer' }}><CheckCircle size={18} /></button>
+                              <button 
+                                title="編輯訂單" 
+                                onClick={() => {
+                                  setEditingOrder({ ...order });
+                                  setShowEditOrderModal(true);
+                                }} 
+                                style={{ background: 'transparent', border: 'none', color: 'var(--primary-color)', cursor: 'pointer' }}
+                              >
+                                <Edit size={18} />
+                              </button>
+                              <button title="取消" onClick={() => updateOrderStatus(order, '已取消')} style={{ background: 'transparent', border: 'none', color: 'var(--danger-color)', cursor: 'pointer' }}><XCircle size={18} /></button>
+                            </div>
+                         </td>
                       </tr>
                     ))
                   )}
@@ -955,6 +994,50 @@ export default function Admin() {
                 <button type="button" onClick={() => setShowEditProductModal(false)} className="btn btn-outline" style={{ flex: 1 }}>取消</button>
                 <button type="submit" disabled={isSubmitting} className="btn btn-primary" style={{ flex: 2 }}>
                   {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : '儲存變更'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* --- 編輯訂單彈窗 --- */}
+      {showEditOrderModal && editingOrder && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: '2rem' }}>
+          <div className="glass-panel animate-fade-in" style={{ maxWidth: '400px', width: '100%', border: '1px solid var(--primary-color)' }}>
+            <h3 style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.5rem' }}>✏️ 修改訂單內容</h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+              客戶：{getCustomerName(editingOrder.CustomerToken)} <br />
+              商品：{editingOrder.ProductID}
+            </p>
+            
+            <form onSubmit={handleUpdateOrder}>
+              <div className="form-group">
+                <label className="form-label">訂購數量 ({editingOrder.Unit || '包'})</label>
+                <input 
+                  type="number" 
+                  className="form-input" 
+                  value={editingOrder.Quantity} 
+                  onChange={e => setEditingOrder({...editingOrder, Quantity: parseInt(e.target.value) || 0})} 
+                  min="1" 
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">預定出貨日</label>
+                <input 
+                  type="date" 
+                  className="form-input" 
+                  value={editingOrder.TargetShipDate ? new Date(editingOrder.TargetShipDate).toISOString().split('T')[0] : ''} 
+                  onChange={e => setEditingOrder({...editingOrder, TargetShipDate: e.target.value})} 
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+                <button type="button" onClick={() => setShowEditOrderModal(false)} className="btn btn-outline" style={{ flex: 1 }}>取消</button>
+                <button type="submit" disabled={isSubmitting} className="btn btn-primary" style={{ flex: 2 }}>
+                  {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : '確認修改'}
                 </button>
               </div>
             </form>

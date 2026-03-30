@@ -68,6 +68,12 @@ export const api = {
   updateCustomer: (customerToken, customerData) =>
     apiCall('updateCustomer', { customerToken, customerData }),
 
+  updateOrderStatus: (customerToken, orderData, newStatus) =>
+    apiCall('updateOrderStatus', { customerToken, orderData, newStatus }),
+
+  updateOrder: (customerToken, orderData, updatedOrder) =>
+    apiCall('updateOrder', { customerToken, orderData, updatedOrder }),
+
   resetCustomerPassword: (customerToken, targetAccount) =>
     apiCall('resetCustomerPassword', { customerToken, targetAccount }),
     
