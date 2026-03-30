@@ -283,9 +283,6 @@ function handleResetPasswordWithCode(account, code, newPassword) {
   return {status: 'error', message: '帳號資訊不符'};
 }
 
-  return null;
-}
-
 /**
  * 核心優化：一次性取得帳號資訊、管理員權限、以及商品清單字串 (減少試算表讀取次數)
  */
