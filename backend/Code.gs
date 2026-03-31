@@ -9,15 +9,15 @@ function initializeDatabase() {
   
   // customers
   let cS = getSheet("customers") || ss.insertSheet("customers");
-  if(cS.getLastRow() < 1) cS.getRange(1, 1, 1, 11).setValues([["Account", "Password", "Token", "IsAdmin", "Email", "Phone", "IsBlocked", "FailedAttempts", "Salt", "ResetCode", "ResetExpiry"]]);
+  if(cS.getLastRow() < 1) cS.getRange(1, 1, 1, 12).setValues([["Account", "Password", "Token", "IsAdmin", "Email", "Phone", "Address", "IsBlocked", "FailedAttempts", "Salt", "ResetCode", "ResetExpiry"]]);
   if(cS.getLastRow() < 2) {
       const salt = Utilities.getUuid();
-      cS.appendRow(["evan", hashPassword("1234", salt), "T-001", "1", "evan@example.com", "0912-345-678", 0, 0, salt, "", ""]);
+      cS.appendRow(["evan", hashPassword("1234", salt), "T-001", "1", "evan@example.com", "0912-345-678", "", 0, 0, salt, "", ""]);
   }
   
   // Products
   let pS = getSheet("Products") || ss.insertSheet("Products");
-  if(pS.getLastRow() < 1) pS.getRange(1, 1, 1, 6).setValues([["品名", "價格", "出貨時間", "最小訂購量", "最大訂購量", "單位"]]);
+  if(pS.getLastRow() < 1) pS.getRange(1, 1, 1, 7).setValues([["品名", "價格", "出貨時間", "最小訂購量", "最大訂購量", "單位", "Description"]]);
   
   // Whitelist
   let wS = getSheet("Whitelist") || ss.insertSheet("Whitelist");
@@ -88,6 +88,7 @@ function doPost(e) {
       case 'updateCustomer': return res(handleUpdateCustomer(b.customerToken, b.customerData));
       case 'updateOrderStatus': return res(handleUpdateOrderStatus(b.customerToken, b.orderData, b.newStatus));
       case 'updateOrder': return res(handleUpdateOrder(b.customerToken, b.orderData, b.updatedOrder));
+      case 'batchUpdateOrderStatus': return res(handleBatchUpdateOrderStatus(b.customerToken, b.orderList, b.newStatus));
       case 'resetCustomerPassword': return res(handleResetCustomerPassword(b.customerToken, b.targetAccount));
       case 'requestPasswordReset': return res(handleRequestPasswordReset(b.accountOrEmail));
       case 'resetPasswordWithCode': return res(handleResetPasswordWithCode(b.account, b.code, b.newPassword));
@@ -544,6 +545,12 @@ function addCustomer(adminToken, customerData) {
     "代碼": token,
     "店名": customerData.companyName,
     "公司名稱": customerData.companyName,
+    "電子郵件": customerData.email,
+    "Email": customerData.email,
+    "地址": customerData.address,
+    "Address": customerData.address,
+    "電話": customerData.phone,
+    "Phone": customerData.phone,
     "可購產品": customerData.allowedProducts, // 逗號分隔字串
     "IsAdmin": 0,
     "FailedAttempts": 0,
@@ -588,6 +595,8 @@ function addProduct(adminToken, productData) {
     "出貨時間": productData.leadTime || 1,
     "備貨天數": productData.leadTime || 1,
     "LeadTime": productData.leadTime || 1,
+    "產品描述": productData.description || '',
+    "Description": productData.description || '',
     "價格": 0,
     "Price": 0 // 依據先前需求，價格設為 0
   };
@@ -625,7 +634,9 @@ function handleUpdateCustomer(adminToken, customerData) {
         "Email": customerData.email,
         "電子郵件": customerData.email,
         "Phone": customerData.phone,
-        "電話": customerData.phone
+        "電話": customerData.phone,
+        "Address": customerData.address,
+        "地址": customerData.address
       };
 
       // 遍歷所有欄位，如果匹配則更新
@@ -799,7 +810,9 @@ function handleUpdateCustomer(adminToken, customerData) {
         "Email": customerData.email,
         "電子郵件": customerData.email,
         "Phone": customerData.phone,
-        "電話": customerData.phone
+        "電話": customerData.phone,
+        "Address": customerData.address,
+        "地址": customerData.address
       };
 
       // 遍歷所有欄位，如果匹配則更新
@@ -873,6 +886,8 @@ function handleUpdateProduct(adminToken, productData) {
         "出貨時間": productData.leadTime,
         "備貨天數": productData.leadTime,
         "LeadTime": productData.leadTime,
+        "產品描述": productData.description || '',
+        "Description": productData.description || '',
         "價格": productData.price || 0,
         "Price": productData.price || 0
       };

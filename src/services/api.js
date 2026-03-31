@@ -74,6 +74,9 @@ export const api = {
   updateOrder: (customerToken, orderData, updatedOrder) =>
     apiCall('updateOrder', { customerToken, orderData, updatedOrder }),
 
+  batchUpdateOrderStatus: (customerToken, orderList, newStatus) =>
+    apiCall('batchUpdateOrderStatus', { customerToken, orderList, newStatus }),
+
   resetCustomerPassword: (customerToken, targetAccount) =>
     apiCall('resetCustomerPassword', { customerToken, targetAccount }),
     

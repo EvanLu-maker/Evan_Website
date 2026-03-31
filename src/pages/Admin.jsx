@@ -25,14 +25,14 @@ export default function Admin() {
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [resultPassword, setResultPassword] = useState('');
-  const [newCustomer, setNewCustomer] = useState({ account: '', companyName: '', allowedProducts: [] });
+  const [newCustomer, setNewCustomer] = useState({ account: '', companyName: '', email: '', address: '', allowedProducts: [] });
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showEditProductModal, setShowEditProductModal] = useState(false);
   const [showEditOrderModal, setShowEditOrderModal] = useState(false);
-  const [newProduct, setNewProduct] = useState({ name: '', minQty: 0, maxQty: 0, unit: '包', leadTime: 1 });
+  const [newProduct, setNewProduct] = useState({ name: '', description: '', minQty: 0, maxQty: 0, unit: '包', leadTime: 1 });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showOnlyPending, setShowOnlyPending] = useState(false);
@@ -274,7 +274,7 @@ export default function Admin() {
       setResultPassword(res.password);
       alert('客戶建立成功！');
       fetchData(adminToken); 
-      setNewCustomer({ account: '', companyName: '', allowedProducts: [] });
+      setNewCustomer({ account: '', companyName: '', email: '', address: '', allowedProducts: [] });
     } catch (err) {
       alert('建立失敗：' + err.message);
     } finally {
@@ -292,7 +292,7 @@ export default function Admin() {
       alert('商品上架成功！');
       fetchData(adminToken);
       setShowProductModal(false);
-      setNewProduct({ name: '', minQty: 0, maxQty: 0, unit: '包', leadTime: 1 });
+      setNewProduct({ name: '', description: '', minQty: 0, maxQty: 0, unit: '包', leadTime: 1 });
     } catch (err) {
       alert('建立失敗：' + err.message);
     } finally {
@@ -766,9 +766,9 @@ export default function Admin() {
                                 setEditingCustomer({
                                   account: cust.account,
                                   companyName: cust.companyName,
-                                  email: cust.email || '',
-                                  phone: cust.phone || '',
-                                  address: cust.address || '',
+                                  email: cust.email || cust.Email || cust.電子郵件 || '',
+                                  phone: cust.phone || cust.Phone || cust.電話 || '',
+                                  address: cust.address || cust.Address || cust.地址 || '',
                                   allowedProducts: (cust.可購產品 || '').split(',').filter(x => x)
                                 });
                                 setShowEditModal(true);
@@ -894,6 +894,17 @@ export default function Admin() {
                   </div>
                 </div>
 
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">電子郵件 (Email)</label>
+                    <input type="email" className="form-input" value={newCustomer.email} onChange={e => setNewCustomer({...newCustomer, email: e.target.value})} placeholder="example@mail.com" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">地址 (隨貨地址)</label>
+                    <input type="text" className="form-input" value={newCustomer.address} onChange={e => setNewCustomer({...newCustomer, address: e.target.value})} placeholder="例如: 台北市..." />
+                  </div>
+                </div>
+
                 <div className="form-group" style={{ marginTop: '1rem' }}>
                   <label className="form-label">授權可購商品 (勾選清單)</label>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '8px', maxHeight: '250px', overflowY: 'auto' }}>
@@ -957,6 +968,11 @@ export default function Admin() {
               </div>
 
               <div className="form-group" style={{ marginTop: '1rem' }}>
+                <label className="form-label">地址</label>
+                <input type="text" className="form-input" value={editingCustomer.address || ''} onChange={e => setEditingCustomer({...editingCustomer, address: e.target.value})} placeholder="請輸入客戶地址" />
+              </div>
+
+              <div className="form-group" style={{ marginTop: '1rem' }}>
                 <label className="form-label">授權可購商品</label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '8px', maxHeight: '200px', overflowY: 'auto' }}>
                   {products.map((p, pIdx) => {
@@ -997,6 +1013,17 @@ export default function Admin() {
               <div className="form-group">
                 <label className="form-label">商品品名</label>
                 <input type="text" className="form-input" required value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} placeholder="例如: 漂白水-30KG/桶" />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">產品描述 (會顯示在前台)</label>
+                <textarea 
+                  className="form-input" 
+                  style={{ minHeight: '80px', resize: 'vertical' }}
+                  value={newProduct.description} 
+                  onChange={e => setNewProduct({...newProduct, description: e.target.value})} 
+                  placeholder="請輸入產品規格、描述或注意事項..."
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -1041,6 +1068,17 @@ export default function Admin() {
               <div className="form-group">
                 <label className="form-label">商品品名 (不可修改)</label>
                 <input type="text" className="form-input" value={editingProduct.name} disabled style={{ opacity: 0.6 }} />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">產品描述</label>
+                <textarea 
+                  className="form-input" 
+                  style={{ minHeight: '80px', resize: 'vertical' }}
+                  value={editingProduct.description || editingProduct.Description || editingProduct.產品描述 || ''} 
+                  onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} 
+                  placeholder="請輸入產品描述..."
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>

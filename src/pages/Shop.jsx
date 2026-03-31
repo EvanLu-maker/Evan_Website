@@ -96,7 +96,9 @@ export default function Shop() {
     const d = String(earliestDate.getDate()).padStart(2, '0');
     const earliestDateStr = `${y}-${m}-${d}`;
     
-    return { name, minQty, maxQty, unit, leadTime, earliestDateStr };
+    const description = p.Description || p.描述 || p.產品描述 || '';
+    
+    return { name, description, minQty, maxQty, unit, leadTime, earliestDateStr };
   };
 
   const addRow = () => {
@@ -288,10 +290,13 @@ export default function Shop() {
                                })}
                            </select>
                            {info && (
-                               <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                                   {info.minQty > 0 || info.maxQty > 0 ? '限制: ' : ''}
-                                   {info.minQty > 0 ? `起訂 ${info.minQty}單位 ` : ''} 
-                                   {info.maxQty > 0 ? `/ 最大 ${info.maxQty}` : ''}
+                               <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                   {info.description && <div style={{ color: 'var(--primary-color)', fontStyle: 'italic', marginBottom: '2px' }}>{info.description}</div>}
+                                   <div>
+                                       {info.minQty > 0 || info.maxQty > 0 ? '限制: ' : ''}
+                                       {info.minQty > 0 ? `起訂 ${info.minQty}單位 ` : ''} 
+                                       {info.maxQty > 0 ? `/ 最大 ${info.maxQty}` : ''}
+                                   </div>
                                </div>
                            )}
                        </div>
