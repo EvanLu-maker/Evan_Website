@@ -55,13 +55,13 @@ export default function Admin() {
     setSortConfig({ key, direction });
   };
 
+  // -- Initialize & Fetch --
   useEffect(() => { 
     setCurrentPage(1); 
     setSelectedOrders(new Set()); 
   }, [searchTerm, showOnlyPending]);
 
   useEffect(() => {
-    // 優先讀取本地快取，實現「秒開」
     const cachedOrders = localStorage.getItem('admin_orders');
     const cachedProducts = localStorage.getItem('admin_products');
     const cachedCustomers = localStorage.getItem('admin_customers');
@@ -72,22 +72,11 @@ export default function Admin() {
     if (cachedCustomers) setCustomers(JSON.parse(cachedCustomers));
     if (cachedLogs) setLoginLogs(JSON.parse(cachedLogs));
 
-    // 如果有舊資料，就先關掉全螢幕加載
-    if (cachedOrders && cachedProducts) {
-      setLoading(false);
-    }
+    if (cachedOrders && cachedProducts) setLoading(false);
 
     const user = JSON.parse(sessionStorage.getItem('user'));
-    if (!user) {
-      navigate('/');
-      return;
-    }
-    
-    if (!user.isAdmin) {
-      setError('此帳號不具備管理員權限，請聯絡系統管理員。');
-      setLoading(false);
-      return;
-    }
+    if (!user) { navigate('/'); return; }
+    if (!user.isAdmin) { setError('此帳號不具備管理員權限，請聯絡系統管理員。'); setLoading(false); return; }
 
     setAdminToken(user.token);
     fetchData(user.token);
@@ -98,57 +87,23 @@ export default function Admin() {
     setIsSyncing(true);
     setError('');
     try {
-      // 策略：優先使用統一介面 (一次載入全部)，減少連線開銷
-      try {
-        const dashboardData = await api.getAdminDashboardData(token);
-        
-        // 更新狀態
-        setOrders(dashboardData.orders || []);
-        setProducts(dashboardData.products || []);
-        setCustomers(dashboardData.customers || []);
-        setLoginLogs(dashboardData.logs || []);
-
-        // 寫入快取
-        localStorage.setItem('admin_orders', JSON.stringify(dashboardData.orders || []));
-        localStorage.setItem('admin_products', JSON.stringify(dashboardData.products || []));
-        localStorage.setItem('admin_customers', JSON.stringify(dashboardData.customers || []));
-        localStorage.setItem('admin_logs', JSON.stringify(dashboardData.logs || []));
-
-        console.log('✅ 統一數據載入完成且已緩存');
-      } catch (e) {
-        console.warn('Unified endpoint failed, falling back to parallel fetch:', e);
-        // 備援計畫：並行載入 (Parallel)
-        const [orderRes, productRes, custRes, logsRes] = await Promise.all([
-          api.getMyOrders(token),
-          api.getProducts(token),
-          api.getCustomers(token).catch(() => ({data: []})),
-          api.getLoginLogs(token).catch(() => ({data: []}))
-        ]);
-
-        const o = orderRes.data || [];
-        const p = productRes.data || [];
-        const c = custRes.data || [];
-        const l = logsRes.data || [];
-
-        setOrders(o);
-        setProducts(p);
-        setCustomers(c);
-        setLoginLogs(l);
-
-        localStorage.setItem('admin_orders', JSON.stringify(o));
-        localStorage.setItem('admin_products', JSON.stringify(p));
-        localStorage.setItem('admin_customers', JSON.stringify(c));
-        localStorage.setItem('admin_logs', JSON.stringify(l));
-      }
+      const dashboardData = await api.getAdminDashboardData(token);
+      setOrders(dashboardData.orders || []);
+      setProducts(dashboardData.products || []);
+      setCustomers(dashboardData.customers || []);
+      setLoginLogs(dashboardData.logs || []);
+      localStorage.setItem('admin_orders', JSON.stringify(dashboardData.orders || []));
+      localStorage.setItem('admin_products', JSON.stringify(dashboardData.products || []));
+      localStorage.setItem('admin_customers', JSON.stringify(dashboardData.customers || []));
+      localStorage.setItem('admin_logs', JSON.stringify(dashboardData.logs || []));
     } catch (err) {
       console.error(err);
-      setError(err.message || '加載失敗，請確保權限或試算表狀態正確。');
+      setError(err.message || '加載失敗，請確保權限。');
     } finally {
       setLoading(false);
       setIsSyncing(false);
     }
   };
-
 
   // 訂單過濾與排序邏輯
   const filteredAndSortedOrders = useMemo(() => {
